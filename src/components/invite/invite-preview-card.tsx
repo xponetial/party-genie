@@ -1,5 +1,6 @@
 import { markInviteSentAction, saveInviteAction } from "@/app/events/actions";
 import { type EventDetails, type GuestDetails, type InviteDetails } from "@/lib/events";
+import { AiGenerateButton } from "@/components/ai/ai-generate-button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -41,39 +42,50 @@ export function InvitePreviewCard({
         </div>
 
         {invite ? (
-          <form action={saveInviteAction}>
-            <input type="hidden" name="eventId" value={event.id} />
-            <input type="hidden" name="inviteId" value={invite.id} />
+          <div>
             <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Message controls</p>
-            <h3 className="mt-3 text-xl font-semibold text-ink">Edit the live invite copy</h3>
-            <div className="mt-4 space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="invite-copy">Invite message</Label>
-                <textarea
-                  id="invite-copy"
-                  name="inviteCopy"
-                  defaultValue={invite.invite_copy ?? ""}
-                  className="min-h-48 w-full rounded-[1.75rem] border border-border bg-[#fffaf2] p-5 text-sm leading-7 text-ink-muted outline-none transition focus:border-brand/50 focus:ring-4 focus:ring-brand/10"
-                  required
-                />
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-xl font-semibold text-ink">Edit the live invite copy</h3>
+              <AiGenerateButton
+                endpoint="/api/ai/generate-invite-copy"
+                eventId={event.id}
+                label="Regenerate with AI"
+                pendingLabel="Generating copy..."
+                variant="ghost"
+              />
+            </div>
+            <form action={saveInviteAction} className="mt-4">
+              <input type="hidden" name="eventId" value={event.id} />
+              <input type="hidden" name="inviteId" value={invite.id} />
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="invite-copy">Invite message</Label>
+                  <textarea
+                    id="invite-copy"
+                    name="inviteCopy"
+                    defaultValue={invite.invite_copy ?? ""}
+                    className="min-h-48 w-full rounded-[1.75rem] border border-border bg-[#fffaf2] p-5 text-sm leading-7 text-ink-muted outline-none transition focus:border-brand/50 focus:ring-4 focus:ring-brand/10"
+                    required
+                  />
+                </div>
+                <label className="flex items-center gap-3 rounded-2xl border border-border bg-white/85 px-4 py-3 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    name="isPublic"
+                    value="true"
+                    defaultChecked={invite.is_public}
+                    className="size-4 accent-[var(--brand)]"
+                  />
+                  Enable public RSVP link
+                </label>
               </div>
-              <label className="flex items-center gap-3 rounded-2xl border border-border bg-white/85 px-4 py-3 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  name="isPublic"
-                  value="true"
-                  defaultChecked={invite.is_public}
-                  className="size-4 accent-[var(--brand)]"
-                />
-                Enable public RSVP link
-              </label>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <SubmitButton pendingLabel="Saving invite..." variant="secondary">
-                Save invite copy
-              </SubmitButton>
-            </div>
-          </form>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <SubmitButton pendingLabel="Saving invite..." variant="secondary">
+                  Save invite copy
+                </SubmitButton>
+              </div>
+            </form>
+          </div>
         ) : (
           <div>
             <p className="text-sm text-ink-muted">No invite record was found for this event yet.</p>

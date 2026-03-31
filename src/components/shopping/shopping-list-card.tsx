@@ -1,4 +1,5 @@
 import { addShoppingItemAction, updateShoppingSettingsAction } from "@/app/events/actions";
+import { AiGenerateButton } from "@/components/ai/ai-generate-button";
 import { type ShoppingItemDetails, type ShoppingListDetails } from "@/lib/events";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -33,9 +34,17 @@ export function ShoppingListCard({
               Add real line items, keep the running total updated, and choose the retailer handoff.
             </p>
           </div>
-          <p className="text-sm font-medium text-brand">
-            Estimated total: {formatMoney(shoppingList?.estimated_total ?? 0)}
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm font-medium text-brand">
+              Estimated total: {formatMoney(shoppingList?.estimated_total ?? 0)}
+            </p>
+            <AiGenerateButton
+              endpoint="/api/ai/generate-shopping-list"
+              eventId={eventId}
+              label="Generate with AI"
+              pendingLabel="Generating list..."
+            />
+          </div>
         </div>
 
         {shoppingList ? (

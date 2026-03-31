@@ -8,6 +8,7 @@ import {
   type ShoppingItemDetails,
   type TaskDetails,
 } from "@/lib/events";
+import { AiGenerateButton } from "@/components/ai/ai-generate-button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 
@@ -50,7 +51,15 @@ export function EventWorkspaceOverview({
                   "Add invite copy to start shaping the voice of your event."}
               </p>
             </div>
-            <Badge variant="success">{event.status}</Badge>
+            <div className="flex items-center gap-3">
+              <Badge variant="success">{event.status}</Badge>
+              <AiGenerateButton
+                endpoint="/api/ai/generate-plan"
+                eventId={eventId}
+                label="Refresh AI plan"
+                pendingLabel="Refreshing plan..."
+              />
+            </div>
           </div>
           <div className="mt-6 grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
             <div className="rounded-[1.75rem] border border-dashed border-border bg-canvas p-5">
