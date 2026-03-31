@@ -10,6 +10,11 @@ const blankToNullNumber = z.preprocess((value) => {
     return null;
   }
 
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? value : parsed;
+  }
+
   return value;
 }, z.number().min(0).nullable());
 
