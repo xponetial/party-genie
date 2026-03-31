@@ -1,3 +1,6 @@
+import OpenAI from "openai";
+import { z } from "zod";
+
 type EventSeed = {
   title: string;
   event_type: string;
@@ -42,8 +45,76 @@ export type GeneratedPartyPlan = {
     provider: string;
     generatedAt: string;
     summary: string;
+    model?: string;
   };
 };
+
+const generatedTaskSchema = z.object({
+  title: z.string().min(3),
+  due_label: z.string().min(2),
+  phase: z.string().min(2),
+});
+
+const generatedTimelineSchema = z.object({
+  label: z.string().min(2),
+  detail: z.string().min(4),
+  sort_order: z.number().int().min(1),
+});
+
+const generatedShoppingItemSchema = z.object({
+  category: z.string().min(2),
+  name: z.string().min(2),
+  quantity: z.number().int().min(1),
+  estimated_price: z.number().min(0).nullable(),
+  external_url: z.string().url().nullable(),
+});
+
+const generatedShoppingCategorySchema = z.object({
+  category: z.string().min(2),
+  items: z.array(
+    z.object({
+      name: z.string().min(2),
+      quantity: z.number().int().min(1),
+    }),
+  ).min(1),
+});
+
+const generatedPartyPlanSchema = z.object({
+  theme: z.string().min(3),
+  inviteCopy: z.string().min(20),
+  menu: z.array(z.string().min(2)).min(3),
+  shoppingCategories: z.array(generatedShoppingCategorySchema).min(2),
+  shoppingItems: z.array(generatedShoppingItemSchema).min(3),
+  tasks: z.array(generatedTaskSchema).min(4),
+  timeline: z.array(generatedTimelineSchema).min(4),
+});
+
+const generatedInviteCopySchema = z.object({
+  inviteCopy: z.string().min(20),
+});
+
+const generatedShoppingListSchema = z.object({
+  shoppingItems: z.array(generatedShoppingItemSchema).min(3),
+  shoppingCategories: z.array(generatedShoppingCategorySchema).min(2),
+});
+
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    return null;
+  }
+
+  return new OpenAI({ apiKey });
+}
+
+function getOpenAIModel() {
+  return process.env.OPENAI_MODEL?.trim() || "gpt-5";
+}
+
+function getBudgetLabel(event: EventSeed) {
+  return event.budget == null ? "Flexible budget" : `$${event.budget}`;
+}
 
 function getGuestCount(event: EventSeed) {
   return event.guest_target ?? 12;
@@ -172,6 +243,77 @@ function toShoppingCategories(items: GeneratedShoppingItem[]) {
   }));
 }
 
+function eventBrief(event: EventSeed) {
+  return [
+    `Title: ${event.title}`,
+    `Type: ${event.event_type}`,
+    `Theme: ${getTheme(event)}`,
+    `Date: ${getEventMoment(event)}`,
+    `Location: ${event.location ?? "TBD"}`,
+    `Guest target: ${getGuestCount(event)}`,
+    `Budget: ${getBudgetLabel(event)}`,
+  ].join("\n");
+}
+
+function extractJsonObject(rawText: string) {
+  const start = rawText.indexOf("{");
+  const end = rawText.lastIndexOf("}");
+
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error("The AI response did not contain valid JSON.");
+  }
+
+  return JSON.parse(rawText.slice(start, end + 1));
+}
+
+async function generateStructuredObject<T>({
+  systemPrompt,
+  userPrompt,
+  schema,
+}: {
+  systemPrompt: string;
+  userPrompt: string;
+  schema: z.ZodSchema<T>;
+}) {
+  const client = getOpenAIClient();
+
+  if (!client) {
+    return null;
+  }
+
+  const model = getOpenAIModel();
+  const response = await client.responses.create({
+    model,
+    input: [
+      {
+        role: "system",
+        content: [
+          {
+            type: "input_text",
+            text: `${systemPrompt}\nReturn only JSON with no markdown fences.`,
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [{ type: "input_text", text: userPrompt }],
+      },
+    ],
+  });
+
+  const parsed = schema.parse(extractJsonObject(response.output_text));
+
+  return {
+    data: parsed,
+    rawResponse: {
+      provider: "openai-responses",
+      generatedAt: new Date().toISOString(),
+      summary: "Generated using the OpenAI Responses API.",
+      model,
+    },
+  };
+}
+
 export function buildPartyPlan(event: EventSeed): GeneratedPartyPlan {
   const theme = getTheme(event);
   const guestCount = getGuestCount(event);
@@ -220,3 +362,89 @@ export function buildShoppingList(event: EventSeed) {
     shoppingCategories: toShoppingCategories(shoppingItems),
   };
 }
+
+export async function generatePartyPlan(event: EventSeed): Promise<GeneratedPartyPlan> {
+  const fallback = buildPartyPlan(event);
+  const generated = await generateStructuredObject({
+    systemPrompt:
+      "You are PartyGenie, an event planning assistant. Create practical host-ready party plans that are realistic, concise, and easy to execute.",
+    userPrompt: `Create a complete event plan for this brief.\n${eventBrief(event)}\n\nRequirements:
+- Keep the plan aligned to the event type, budget, and guest count.
+- Return 3 to 5 menu items.
+- Return 4 to 6 shopping items with realistic quantities.
+- Return 4 tasks.
+- Return 4 timeline items with sort_order starting at 1.
+- Use null for external_url unless a clear retailer link is necessary.`,
+    schema: generatedPartyPlanSchema,
+  }).catch(() => null);
+
+  if (!generated) {
+    return fallback;
+  }
+
+  return {
+    ...generated.data,
+    rawResponse: generated.rawResponse,
+  };
+}
+
+export async function generateInviteCopy(event: EventSeed) {
+  const fallback = buildInviteCopy(event);
+  const generated = await generateStructuredObject({
+    systemPrompt:
+      "You write polished invitation copy for event hosts. Keep the tone warm, specific, and ready to send.",
+    userPrompt: `Write invitation copy for this event brief.\n${eventBrief(event)}\n\nRequirements:
+- Keep it to one short paragraph.
+- Mention the event title, timing, tone, and RSVP request.
+- Return JSON with an inviteCopy field only.`,
+    schema: generatedInviteCopySchema,
+  }).catch(() => null);
+
+  if (!generated) {
+    return {
+      inviteCopy: fallback,
+      rawResponse: {
+        provider: "party-genie-structured-fallback",
+        generatedAt: new Date().toISOString(),
+        summary: "Generated invite copy using the local fallback planner.",
+      },
+    };
+  }
+
+  return {
+    inviteCopy: generated.data.inviteCopy,
+    rawResponse: generated.rawResponse,
+  };
+}
+
+export async function generateShoppingList(event: EventSeed) {
+  const fallback = buildShoppingList(event);
+  const generated = await generateStructuredObject({
+    systemPrompt:
+      "You build concise shopping lists for event hosts. Focus on realistic, high-signal items only.",
+    userPrompt: `Create a shopping list for this event brief.\n${eventBrief(event)}\n\nRequirements:
+- Return 4 to 6 useful items.
+- Use broad categories like Decor, Food, Beverages, Hosting.
+- Quantities must be whole numbers.
+- Use null for external_url unless absolutely necessary.`,
+    schema: generatedShoppingListSchema,
+  }).catch(() => null);
+
+  if (!generated) {
+    return {
+      ...fallback,
+      rawResponse: {
+        provider: "party-genie-structured-fallback",
+        generatedAt: new Date().toISOString(),
+        summary: "Generated shopping list using the local fallback planner.",
+      },
+    };
+  }
+
+  return {
+    ...generated.data,
+    rawResponse: generated.rawResponse,
+  };
+}
+
+export type { EventSeed, GeneratedShoppingItem };

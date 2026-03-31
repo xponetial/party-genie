@@ -1,5 +1,9 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { buildInviteCopy, buildPartyPlan, buildShoppingList } from "@/lib/ai/party-genie";
+import {
+  generateInviteCopy,
+  generatePartyPlan,
+  generateShoppingList,
+} from "@/lib/ai/party-genie";
 
 type EventRecord = {
   id: string;
@@ -233,7 +237,7 @@ async function syncTimeline(
 
 export async function generatePlanForEvent(supabase: SupabaseClient, eventId: string) {
   const event = await loadEventSeed(supabase, eventId);
-  const generated = buildPartyPlan(event);
+  const generated = await generatePartyPlan(event);
 
   await ensureInvite(supabase, eventId, generated.inviteCopy);
 
@@ -279,7 +283,8 @@ export async function generatePlanForEvent(supabase: SupabaseClient, eventId: st
 
 export async function generateInviteCopyForEvent(supabase: SupabaseClient, eventId: string) {
   const event = await loadEventSeed(supabase, eventId);
-  const inviteCopy = buildInviteCopy(event);
+  const generated = await generateInviteCopy(event);
+  const inviteCopy = generated.inviteCopy;
 
   await ensureInvite(supabase, eventId, inviteCopy);
 
@@ -291,11 +296,7 @@ export async function generateInviteCopyForEvent(supabase: SupabaseClient, event
         theme: getThemeFromEvent(event),
         invite_copy: inviteCopy,
         generated_at: new Date().toISOString(),
-        raw_response: {
-          provider: "party-genie-structured-fallback",
-          generatedAt: new Date().toISOString(),
-          summary: "Generated invite copy only.",
-        },
+        raw_response: generated.rawResponse,
       },
       { onConflict: "event_id" },
     );
@@ -310,7 +311,7 @@ function getThemeFromEvent(event: EventRecord) {
 export async function generateShoppingListForEvent(supabase: SupabaseClient, eventId: string) {
   const event = await loadEventSeed(supabase, eventId);
   const shoppingList = await ensureShoppingList(supabase, eventId);
-  const generated = buildShoppingList(event);
+  const generated = await generateShoppingList(event);
   const shoppingSummary = await syncShoppingItems(supabase, shoppingList.id, generated.shoppingItems);
 
   await supabase
@@ -321,11 +322,7 @@ export async function generateShoppingListForEvent(supabase: SupabaseClient, eve
         theme: getThemeFromEvent(event),
         shopping_categories: generated.shoppingCategories,
         generated_at: new Date().toISOString(),
-        raw_response: {
-          provider: "party-genie-structured-fallback",
-          generatedAt: new Date().toISOString(),
-          summary: "Generated shopping list only.",
-        },
+        raw_response: generated.rawResponse,
       },
       { onConflict: "event_id" },
     );

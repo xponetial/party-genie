@@ -22,6 +22,15 @@ npm install
 
 2. Copy `.env.example` to `.env.local` and fill in required values as integrations are wired up.
 
+For real AI generation, add:
+
+```bash
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-5
+```
+
+If `OPENAI_API_KEY` is missing, PartyGenie falls back to the local structured planner so the app still works during development.
+
 3. Start the development server:
 
 ```bash
