@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { enforceAiLimits } from "@/lib/ai/limits";
 import { generateShoppingListForEvent } from "@/lib/ai/workflows";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -28,6 +29,16 @@ export async function POST(request: Request) {
 
   if (!user) {
     return NextResponse.json({ ok: false, message: "You must be signed in." }, { status: 401 });
+  }
+
+  const limit = await enforceAiLimits(supabase, {
+    userId: user.id,
+    eventId: parsed.data.eventId,
+    generationType: "shopping_list_transform",
+  });
+
+  if (!limit.allowed) {
+    return NextResponse.json({ ok: false, message: limit.message }, { status: 429 });
   }
 
   try {
