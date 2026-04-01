@@ -26,7 +26,9 @@ For real AI generation, add:
 
 ```bash
 OPENAI_API_KEY=your_openai_api_key
-OPENAI_MODEL=gpt-5
+OPENAI_MODEL_PLAN=gpt-5.4-mini
+OPENAI_MODEL_LIGHTWEIGHT=gpt-5.4-nano
+OPENAI_MODEL_PREMIUM=gpt-5.4
 ```
 
 If `OPENAI_API_KEY` is missing, PartyGenie falls back to the local structured planner so the app still works during development.

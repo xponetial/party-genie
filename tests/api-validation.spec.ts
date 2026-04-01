@@ -38,3 +38,13 @@ test("AI generation APIs require auth", async ({ request }) => {
     expect(body.message).toMatch(/signed in/i);
   }
 });
+
+test("AI usage API requires auth", async ({ request }) => {
+  const response = await request.get("/api/usage/me");
+
+  expect(response.status()).toBe(401);
+
+  const body = await response.json();
+  expect(body.ok).toBe(false);
+  expect(body.message).toMatch(/signed in/i);
+});

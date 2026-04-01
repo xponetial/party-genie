@@ -10,6 +10,7 @@ import {
 import { DashboardMetricCard } from "@/components/dashboard/dashboard-metric-card";
 import { DashboardPanel } from "@/components/dashboard/dashboard-panel";
 import { AppShell } from "@/components/layout/app-shell";
+import { getAiUsageForUser } from "@/lib/ai/usage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,15 @@ function truncate(value: string | null, maxLength: number) {
   }
 
   return `${value.slice(0, maxLength - 1)}…`;
+}
+
+function formatCost(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }).format(value);
 }
 
 export default async function DashboardPage() {
@@ -175,6 +185,7 @@ export default async function DashboardPage() {
     latestPlan ? safeEvents.find((event) => event.id === latestPlan.event_id) ?? null : null;
   const aiMenuCount = latestPlan?.menu?.length ?? 0;
   const aiTaskCount = latestPlan?.tasks?.length ?? 0;
+  const usage = await getAiUsageForUser(supabase, user.id);
 
   const metrics = [
     {
@@ -365,6 +376,69 @@ export default async function DashboardPage() {
               <p className="text-sm leading-6 text-ink-muted">{item}</p>
             </div>
           ))}
+        </div>
+      </DashboardPanel>
+
+      <DashboardPanel
+        title="AI usage this month"
+        description="Live telemetry from `ai_generations` and `user_usage_monthly`."
+      >
+        <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-3xl border border-border bg-white/75 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Requests</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">
+                {usage.monthly.requestsCount}
+              </p>
+            </div>
+            <div className="rounded-3xl border border-border bg-white/75 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Estimated cost</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">
+                {formatCost(usage.monthly.estimatedCostUsd)}
+              </p>
+            </div>
+            <div className="rounded-3xl border border-border bg-white/75 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Input tokens</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">{usage.monthly.inputTokens}</p>
+            </div>
+            <div className="rounded-3xl border border-border bg-white/75 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Cache reuse</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">{usage.cacheReuseRate}%</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {usage.recent.length ? (
+              usage.recent.map((generation) => (
+                <div
+                  key={generation.id}
+                  className="flex items-start justify-between gap-4 rounded-2xl border border-border bg-white/75 px-4 py-3"
+                >
+                  <div>
+                    <p className="text-sm font-semibold capitalize text-ink">
+                      {generation.generationType.replaceAll("_", " ")}
+                    </p>
+                    <p className="mt-1 text-sm text-ink-muted">
+                      {generation.model} · {generation.status}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-ink">
+                      {formatCost(generation.estimatedCostUsd)}
+                    </p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.2em] text-ink-muted">
+                      {formatGeneratedAt(generation.createdAt)}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-3xl border border-border bg-white/75 p-5 text-sm leading-6 text-ink-muted">
+                AI usage has not been recorded yet for this month. Generate a plan or invite and the
+                telemetry will appear here automatically.
+              </div>
+            )}
+          </div>
         </div>
       </DashboardPanel>
     </AppShell>
