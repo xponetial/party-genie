@@ -23,12 +23,15 @@ export async function POST(request: Request) {
     );
   }
 
+  const normalizedPlusOneCount =
+    parsed.data.status === "confirmed" ? parsed.data.plusOneCount : 0;
+
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("submit_public_rsvp", {
     p_slug: parsed.data.slug,
     p_guest_token: parsed.data.guestToken,
     p_status: parsed.data.status,
-    p_plus_one_count: parsed.data.plusOneCount,
+    p_plus_one_count: normalizedPlusOneCount,
   });
 
   if (error) {

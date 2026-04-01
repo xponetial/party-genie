@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useActionState } from "react";
 import { submitPublicRsvpAction, type PublicRsvpState } from "@/app/rsvp/[slug]/actions";
 import { Label } from "@/components/ui/label";
@@ -22,6 +23,20 @@ export function PublicRsvpForm({
   successMessage?: string;
 }) {
   const [state, formAction] = useActionState(submitPublicRsvpAction, initialState);
+  const [status, setStatus] = useState(currentStatus);
+  const [plusOneCount, setPlusOneCount] = useState(String(currentPlusOneCount));
+  const plusOneDisabled = status !== "confirmed";
+  const helperText = useMemo(() => {
+    if (status === "declined") {
+      return "No plus-ones are counted when you decline.";
+    }
+
+    if (status === "pending") {
+      return "Leave this at 0 until you know how many guests may join you.";
+    }
+
+    return "Count only the additional people joining you, not yourself.";
+  }, [status]);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -29,17 +44,44 @@ export function PublicRsvpForm({
       <input type="hidden" name="guestToken" value={guestToken} />
 
       <div className="space-y-2">
-        <Label htmlFor="status">RSVP status</Label>
-        <select
-          id="status"
-          name="status"
-          defaultValue={currentStatus}
-          className="w-full rounded-2xl border border-border bg-white px-4 py-3 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-4 focus:ring-brand/10"
-        >
-          <option value="confirmed">Yes, I&apos;ll be there</option>
-          <option value="declined">Sorry, can&apos;t make it</option>
-          <option value="pending">Maybe / still deciding</option>
-        </select>
+        <Label>RSVP status</Label>
+        <div className="grid gap-3">
+          {[
+            {
+              value: "confirmed",
+              label: "Yes, I'll be there",
+              description: "Let the host know to count you in.",
+            },
+            {
+              value: "pending",
+              label: "Maybe / still deciding",
+              description: "Keep your spot warm while you confirm.",
+            },
+            {
+              value: "declined",
+              label: "Sorry, can't make it",
+              description: "Send a polite decline so the host can plan accurately.",
+            },
+          ].map((option) => (
+            <label
+              key={option.value}
+              className="flex cursor-pointer items-start gap-3 rounded-3xl border border-border bg-white px-4 py-4 text-sm transition hover:border-brand/30"
+            >
+              <input
+                type="radio"
+                name="status"
+                value={option.value}
+                checked={status === option.value}
+                onChange={() => setStatus(option.value as typeof currentStatus)}
+                className="mt-1 size-4 accent-[var(--brand)]"
+              />
+              <span className="space-y-1">
+                <span className="block font-medium text-ink">{option.label}</span>
+                <span className="block text-ink-muted">{option.description}</span>
+              </span>
+            </label>
+          ))}
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -49,8 +91,11 @@ export function PublicRsvpForm({
           name="plusOneCount"
           type="number"
           min="0"
-          defaultValue={String(currentPlusOneCount)}
+          value={plusOneDisabled ? "0" : plusOneCount}
+          onChange={(event) => setPlusOneCount(event.target.value)}
+          disabled={plusOneDisabled}
         />
+        <p className="text-sm text-ink-muted">{helperText}</p>
       </div>
 
       {successMessage ? (

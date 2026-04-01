@@ -33,12 +33,15 @@ export async function submitPublicRsvpAction(
     };
   }
 
+  const normalizedPlusOneCount =
+    parsed.data.status === "confirmed" ? parsed.data.plusOneCount : 0;
+
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("submit_public_rsvp", {
     p_slug: parsed.data.slug,
     p_guest_token: parsed.data.guestToken,
     p_status: parsed.data.status,
-    p_plus_one_count: parsed.data.plusOneCount,
+    p_plus_one_count: normalizedPlusOneCount,
   });
 
   if (error) {
@@ -48,6 +51,6 @@ export async function submitPublicRsvpAction(
   }
 
   redirect(
-    `/rsvp/${parsed.data.slug}?guest=${encodeURIComponent(parsed.data.guestToken)}&success=${encodeURIComponent("Thanks, your RSVP was saved.")}`,
+    `/rsvp/${parsed.data.slug}?guest=${encodeURIComponent(parsed.data.guestToken)}&success=1&status=${encodeURIComponent(parsed.data.status)}&plusOnes=${normalizedPlusOneCount}`,
   );
 }

@@ -21,10 +21,10 @@ export default async function PublicRsvpPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ guest?: string; success?: string }>;
+  searchParams: Promise<{ guest?: string; success?: string; status?: string; plusOnes?: string }>;
 }) {
   const { slug } = await params;
-  const { guest: guestToken, success } = await searchParams;
+  const { guest: guestToken, success, status: savedStatus, plusOnes } = await searchParams;
   const supabase = await createSupabaseServerClient();
 
   const { data: inviteRows, error: inviteError } = await supabase.rpc("get_public_invite_by_slug", {
@@ -53,6 +53,26 @@ export default async function PublicRsvpPage({
         timeStyle: "short",
       }).format(new Date(invite.event_date))
     : "Event date coming soon";
+  const wasSaved = success === "1";
+  const normalizedPlusOnes = Number.isFinite(Number(plusOnes)) ? Math.max(0, Number(plusOnes)) : 0;
+  const savedStatusLabel =
+    savedStatus === "confirmed"
+      ? "You're confirmed"
+      : savedStatus === "declined"
+        ? "You've declined"
+        : savedStatus === "pending"
+          ? "You're marked as maybe"
+          : null;
+  const savedStatusDetail =
+    savedStatus === "confirmed"
+      ? normalizedPlusOnes > 0
+        ? `You're bringing ${normalizedPlusOnes} additional guest${normalizedPlusOnes === 1 ? "" : "s"}.`
+        : "The host now has you counted with no additional guests."
+      : savedStatus === "declined"
+        ? "The host has been updated so they can plan accurately."
+        : savedStatus === "pending"
+          ? "You can come back to this same link and finalize later."
+          : null;
 
   return (
     <ShellFrame
@@ -86,13 +106,30 @@ export default async function PublicRsvpPage({
               <p className="mt-2 text-sm leading-6 text-ink-muted">
                 Update your RSVP below. Your current status is <span className="font-medium text-ink">{guestRecord.status}</span>.
               </p>
+              {wasSaved && savedStatusLabel && savedStatusDetail ? (
+                <div className="mt-5 rounded-[1.75rem] border border-[#cfe1da] bg-[#eff8f4] p-5">
+                  <p className="text-xs uppercase tracking-[0.2em] text-accent">Saved</p>
+                  <h4 className="mt-2 text-xl font-semibold text-ink">{savedStatusLabel}</h4>
+                  <p className="mt-2 text-sm leading-6 text-ink-muted">{savedStatusDetail}</p>
+                </div>
+              ) : null}
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-3xl border border-border bg-white/85 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Current RSVP</p>
+                  <p className="mt-2 text-lg font-semibold capitalize text-ink">{guestRecord.status}</p>
+                </div>
+                <div className="rounded-3xl border border-border bg-white/85 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Plus-ones</p>
+                  <p className="mt-2 text-lg font-semibold text-ink">{guestRecord.plus_one_count}</p>
+                </div>
+              </div>
               <div className="mt-6">
                 <PublicRsvpForm
                   slug={slug}
                   guestToken={guestToken!}
                   currentStatus={guestRecord.status}
                   currentPlusOneCount={guestRecord.plus_one_count}
-                  successMessage={success}
+                  successMessage={undefined}
                 />
               </div>
             </>
