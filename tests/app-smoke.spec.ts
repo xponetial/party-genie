@@ -30,6 +30,17 @@ test("pricing page reflects live tier limits", async ({ page }) => {
   await expect(proCard.getByText("500", { exact: true })).toBeVisible();
 });
 
+test("privacy and terms pages describe the live beta", async ({ page }) => {
+  await page.goto("/privacy");
+  await expect(page.getByRole("heading", { name: /privacy/i })).toBeVisible();
+  await expect(page.getByText(/supabase/i).first()).toBeVisible();
+
+  await page.goto("/terms");
+  await expect(page.getByRole("heading", { name: /terms/i })).toBeVisible();
+  await expect(page.getByText(/ai-generated content/i).first()).toBeVisible();
+  await expect(page.getByText(/placeholder terms/i)).toHaveCount(0);
+});
+
 test("dashboard redirects unauthenticated users to login", async ({ page }) => {
   await page.goto("/dashboard");
 
