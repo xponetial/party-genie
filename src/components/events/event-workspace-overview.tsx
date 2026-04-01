@@ -9,6 +9,7 @@ import {
   type TaskDetails,
 } from "@/lib/events";
 import { AiGenerateButton } from "@/components/ai/ai-generate-button";
+import { AiRevisePlanForm } from "@/components/ai/ai-revise-plan-form";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 
@@ -111,6 +112,16 @@ export function EventWorkspaceOverview({
                 <p className="mt-2 text-sm leading-6 text-ink-muted">{item.detail}</p>
               </Link>
             ))}
+          </div>
+          <div className="mt-5 rounded-[1.75rem] border border-border bg-white/85 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">AI revision</p>
+            <p className="mt-2 text-sm leading-6 text-ink-muted">
+              Keep the current event structure, but ask PartyGenie to revise the plan around one
+              specific change.
+            </p>
+            <div className="mt-4">
+              <AiRevisePlanForm eventId={eventId} />
+            </div>
           </div>
         </Card>
       </div>
