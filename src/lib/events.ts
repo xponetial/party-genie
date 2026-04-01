@@ -32,6 +32,10 @@ export type PartyPlanDetails = {
     | null;
   tasks: Array<{ title: string; due_label: string }> | null;
   timeline: Array<{ label: string; detail: string }> | null;
+  model?: string | null;
+  prompt_version?: string | null;
+  summary?: string | null;
+  generated_at?: string | null;
 };
 
 export type GuestDetails = {
@@ -78,6 +82,13 @@ export type TimelineItemDetails = {
   sort_order: number;
 };
 
+export type PlanVersionDetails = {
+  id: string;
+  version_num: number;
+  change_reason: string | null;
+  created_at: string;
+};
+
 export const getEventContext = cache(async (eventId: string) => {
   const supabase = await createSupabaseServerClient();
 
@@ -87,7 +98,10 @@ export const getEventContext = cache(async (eventId: string) => {
       .select("id, title, event_type, event_date, location, guest_target, budget, theme, status")
       .eq("id", eventId)
       .single<EventDetails>(),
-    supabase.from("profiles").select("id, full_name").maybeSingle<{ id: string; full_name: string | null }>(),
+    supabase
+      .from("profiles")
+      .select("id, full_name, plan_tier")
+      .maybeSingle<{ id: string; full_name: string | null; plan_tier: string | null }>(),
   ]);
 
   if (eventError || !event) {
@@ -101,6 +115,7 @@ export const getEventContext = cache(async (eventId: string) => {
     { data: shoppingList },
     { data: tasks = [] },
     { data: timelineItems = [] },
+    { data: planVersions = [] },
   ] = await Promise.all([
     supabase
       .from("invites")
@@ -109,7 +124,7 @@ export const getEventContext = cache(async (eventId: string) => {
       .maybeSingle<InviteDetails>(),
     supabase
       .from("party_plans")
-      .select("id, theme, invite_copy, menu, shopping_categories, tasks, timeline")
+      .select("id, theme, invite_copy, menu, shopping_categories, tasks, timeline, model, prompt_version, summary, generated_at")
       .eq("event_id", eventId)
       .maybeSingle<PartyPlanDetails>(),
     supabase
@@ -135,6 +150,12 @@ export const getEventContext = cache(async (eventId: string) => {
       .eq("event_id", eventId)
       .order("sort_order", { ascending: true })
       .returns<TimelineItemDetails[]>(),
+    supabase
+      .from("plan_versions")
+      .select("id, version_num, change_reason, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5)
+      .returns<PlanVersionDetails[]>(),
   ]);
 
   const shoppingItems = shoppingList
@@ -158,5 +179,6 @@ export const getEventContext = cache(async (eventId: string) => {
     tasks: tasks ?? [],
     timelineItems: timelineItems ?? [],
     profile: profile ?? null,
+    planVersions: planVersions ?? [],
   };
 });

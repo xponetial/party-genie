@@ -12,7 +12,7 @@ export default async function EventSettingsPage({
   params: Promise<{ eventId: string }>;
 }) {
   const { eventId } = await params;
-  const { event, profile } = await getEventContext(eventId);
+  const { event, profile, plan, planVersions } = await getEventContext(eventId);
 
   return (
     <AppShell
@@ -44,6 +44,7 @@ export default async function EventSettingsPage({
               ["Type", event.event_type],
               ["Status", event.status],
               ["Budget", event.budget != null ? `$${event.budget}` : "Not set"],
+              ["Plan tier", profile?.plan_tier ?? "free"],
             ].map(([label, value]) => (
               <div key={label} className="flex items-center justify-between rounded-3xl border border-border bg-white/80 px-4 py-4">
                 <p className="text-sm text-ink-muted">{label}</p>
@@ -66,6 +67,54 @@ export default async function EventSettingsPage({
                 {item}
               </div>
             ))}
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <Card>
+          <h2 className="text-xl font-semibold text-ink">AI planning status</h2>
+          <div className="mt-5 grid gap-3">
+            {[
+              ["Current theme", plan?.theme ?? event.theme ?? "Not generated yet"],
+              ["AI model", plan?.model ?? "Not stored yet"],
+              ["Prompt version", plan?.prompt_version ?? "Not stored yet"],
+              ["Last generated", plan?.generated_at ? new Date(plan.generated_at).toLocaleString("en-US") : "Not generated yet"],
+            ].map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between rounded-3xl border border-border bg-white/80 px-4 py-4">
+                <p className="text-sm text-ink-muted">{label}</p>
+                <p className="text-sm font-medium text-ink">{value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 rounded-3xl border border-border bg-canvas p-4 text-sm leading-6 text-ink-muted">
+            {plan?.summary ??
+              "Generate or revise a plan to start tracking model, prompt version, and revision metadata here."}
+          </div>
+        </Card>
+
+        <Card className="bg-[#fffaf2]">
+          <h2 className="text-xl font-semibold text-ink">Recent plan revisions</h2>
+          <div className="mt-5 grid gap-3">
+            {planVersions.length ? (
+              planVersions.map((version) => (
+                <div key={version.id} className="rounded-3xl border border-border bg-white/85 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-ink">Version {version.version_num}</p>
+                    <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">
+                      {new Date(version.created_at).toLocaleString("en-US")}
+                    </p>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-ink-muted">
+                    {version.change_reason ?? "Saved snapshot before a new AI-generated plan update."}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-3xl border border-border bg-white/85 p-4 text-sm leading-6 text-ink-muted">
+                No saved revisions yet. Once you revise an AI plan, earlier versions will appear here so the host can track the change history.
+              </div>
+            )}
           </div>
         </Card>
       </div>
