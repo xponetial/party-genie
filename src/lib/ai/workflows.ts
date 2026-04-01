@@ -2,8 +2,10 @@ import crypto from "node:crypto";
 import { SupabaseClient } from "@supabase/supabase-js";
 import {
   type AiGenerationType,
+  type GeneratedPartyPlan,
   generateInviteCopy,
   generatePartyPlan,
+  revisePartyPlan,
   generateShoppingList,
   getOpenAIModel,
   getPromptVersion,
@@ -51,6 +53,10 @@ type CachedPlanRecord = {
   prompt_version: string | null;
   model: string | null;
   summary: string | null;
+};
+
+type PlanVersionRecord = {
+  version_num: number;
 };
 
 function buildFingerprint(input: Record<string, unknown>) {
@@ -217,6 +223,18 @@ async function loadCachedPlan(
     .eq("prompt_version", promptVersion)
     .eq("model", model)
     .maybeSingle<CachedPlanRecord>();
+
+  return data ?? null;
+}
+
+async function getCurrentPlanRecord(supabase: SupabaseClient, eventId: string) {
+  const { data } = await supabase
+    .from("party_plans")
+    .select(
+      "id, event_id, theme, invite_copy, menu, shopping_categories, tasks, timeline, raw_response, request_fingerprint, prompt_version, model, summary",
+    )
+    .eq("event_id", eventId)
+    .maybeSingle<CachedPlanRecord & { id: string }>();
 
   return data ?? null;
 }
@@ -541,6 +559,138 @@ export async function generatePlanForEvent(
     shoppingCategories: generated.shoppingCategories,
     tasks: generated.tasks,
     timeline: generated.timeline,
+    synced: {
+      shoppingItemsAdded: shoppingSummary.addedCount,
+      tasksAdded,
+      timelineAdded,
+      estimatedTotal: shoppingSummary.estimatedTotal,
+      cacheHit: false,
+    },
+  };
+}
+
+export async function revisePlanForEvent(
+  supabase: SupabaseClient,
+  eventId: string,
+  {
+    changeType,
+    instructions,
+  }: {
+    changeType: string;
+    instructions: string;
+  },
+) {
+  const event = await loadEventSeed(supabase, eventId);
+  const currentPlanRecord = await getCurrentPlanRecord(supabase, eventId);
+
+  if (!currentPlanRecord) {
+    return generatePlanForEvent(supabase, eventId, { forceRegenerate: true });
+  }
+
+  const currentPlan: GeneratedPartyPlan = {
+    theme: currentPlanRecord.theme ?? getThemeFromEvent(event),
+    inviteCopy: currentPlanRecord.invite_copy ?? "",
+    menu: currentPlanRecord.menu ?? [],
+    shoppingCategories: currentPlanRecord.shopping_categories ?? [],
+    shoppingItems: [],
+    tasks: currentPlanRecord.tasks ?? [],
+    timeline: currentPlanRecord.timeline ?? [],
+    rawResponse: {
+      provider: currentPlanRecord.raw_response?.provider ?? "party-plan-record",
+      generatedAt: currentPlanRecord.raw_response?.generatedAt ?? new Date().toISOString(),
+      summary: currentPlanRecord.summary ?? "Loaded current plan from Supabase.",
+      model: currentPlanRecord.model ?? getOpenAIModel("plan"),
+      promptVersion:
+        currentPlanRecord.prompt_version ?? getPromptVersion("plan_revision"),
+    },
+  };
+
+  const revisedPlan = await revisePartyPlan({
+    event,
+    currentPlan,
+    changeType,
+    instructions,
+  });
+
+  const { data: latestVersion } = await supabase
+    .from("plan_versions")
+    .select("version_num")
+    .eq("plan_id", currentPlanRecord.id)
+    .order("version_num", { ascending: false })
+    .limit(1)
+    .maybeSingle<PlanVersionRecord>();
+
+  await supabase.from("plan_versions").insert({
+    plan_id: currentPlanRecord.id,
+    version_num: (latestVersion?.version_num ?? 0) + 1,
+    change_reason: instructions,
+    plan_json: {
+      theme: currentPlan.theme,
+      inviteCopy: currentPlan.inviteCopy,
+      menu: currentPlan.menu,
+      shoppingCategories: currentPlan.shoppingCategories,
+      tasks: currentPlan.tasks,
+      timeline: currentPlan.timeline,
+    },
+  });
+
+  const fingerprintInput = {
+    ...buildEventFingerprint(event, "plan_revision"),
+    changeType: changeType.trim().toLowerCase(),
+    instructions: instructions.trim().toLowerCase(),
+  };
+  const requestFingerprint = buildFingerprint(fingerprintInput);
+  const promptVersion = revisedPlan.rawResponse.promptVersion ?? getPromptVersion("plan_revision");
+  const model = revisedPlan.rawResponse.model ?? getOpenAIModel("plan");
+
+  await ensureInvite(supabase, eventId, revisedPlan.inviteCopy);
+
+  const shoppingList = await ensureShoppingList(supabase, eventId);
+  const shoppingSummary = await syncShoppingItems(supabase, shoppingList.id, revisedPlan.shoppingItems);
+  const tasksAdded = await syncTasks(supabase, eventId, revisedPlan.tasks);
+  const timelineAdded = await syncTimeline(supabase, eventId, revisedPlan.timeline);
+
+  const { error } = await supabase
+    .from("party_plans")
+    .update({
+      theme: revisedPlan.theme,
+      invite_copy: revisedPlan.inviteCopy,
+      menu: revisedPlan.menu,
+      shopping_categories: revisedPlan.shoppingCategories,
+      tasks: revisedPlan.tasks,
+      timeline: revisedPlan.timeline.map(({ label, detail }) => ({ label, detail })),
+      raw_response: revisedPlan.rawResponse,
+      generated_at: new Date().toISOString(),
+      request_fingerprint: requestFingerprint,
+      prompt_version: promptVersion,
+      model,
+      status: "ready",
+      summary: revisedPlan.rawResponse.summary,
+    })
+    .eq("id", currentPlanRecord.id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const usage = revisedPlan.rawResponse.usage;
+  await trackGeneration(supabase, {
+    userId: event.owner_id,
+    eventId,
+    generationType: "plan_revision",
+    model,
+    requestFingerprint,
+    promptVersion,
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+    cachedInputTokens: usage?.cachedInputTokens ?? 0,
+    estimatedCostUsd: usage?.estimatedCostUsd ?? 0,
+    latencyMs: usage?.latencyMs ?? 0,
+    status: usage?.usedFallback ? "fallback" : "success",
+  });
+
+  return {
+    ...revisedPlan,
     synced: {
       shoppingItemsAdded: shoppingSummary.addedCount,
       tasksAdded,

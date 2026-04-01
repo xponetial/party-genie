@@ -53,6 +53,7 @@ export type GeneratedPartyPlan = {
 
 export type AiGenerationType =
   | "party_plan"
+  | "plan_revision"
   | "invitation_text"
   | "shopping_list_transform"
   | "premium_concierge";
@@ -121,6 +122,7 @@ const generatedShoppingListSchema = z.object({
 type AiTaskType = "plan" | "lightweight" | "premium";
 const PROMPT_VERSIONS: Record<AiGenerationType, string> = {
   party_plan: "party-plan-v2",
+  plan_revision: "plan-revision-v1",
   invitation_text: "invitation-text-v2",
   shopping_list_transform: "shopping-list-v2",
   premium_concierge: "premium-concierge-v1",
@@ -468,6 +470,74 @@ export function buildShoppingList(event: EventSeed) {
   return {
     shoppingItems,
     shoppingCategories: toShoppingCategories(shoppingItems),
+  };
+}
+
+export async function revisePartyPlan({
+  event,
+  currentPlan,
+  changeType,
+  instructions,
+}: {
+  event: EventSeed;
+  currentPlan: GeneratedPartyPlan;
+  changeType: string;
+  instructions: string;
+}): Promise<GeneratedPartyPlan> {
+  const fallback = buildPartyPlan(event);
+  const generated = await generateStructuredObject({
+    generationType: "plan_revision",
+    taskType: "plan",
+    systemPrompt:
+      "You revise structured party plans for hosts. Keep revisions practical, preserve good existing details, and return clean JSON only.",
+    userPrompt: `Revise this party plan.\n\nEvent brief:\n${eventBrief(event)}\n\nChange type: ${changeType}\nInstructions: ${instructions}\n\nCurrent plan JSON:\n${JSON.stringify({
+      theme: currentPlan.theme,
+      inviteCopy: currentPlan.inviteCopy,
+      menu: currentPlan.menu,
+      shoppingCategories: currentPlan.shoppingCategories,
+      shoppingItems: currentPlan.shoppingItems,
+      tasks: currentPlan.tasks,
+      timeline: currentPlan.timeline,
+    })}\n\nRequirements:
+- Keep the output aligned to the updated request.
+- Return a complete plan, not a partial diff.
+- Preserve useful details unless the instruction requires changing them.
+- Return only JSON.`,
+    schema: generatedPartyPlanSchema,
+  }).catch(() => null);
+
+  if (!generated) {
+    return {
+      ...fallback,
+      rawResponse: {
+        ...fallback.rawResponse,
+        model: getOpenAIModel("plan"),
+        promptVersion: getPromptVersion("plan_revision"),
+        usage: {
+          model: getOpenAIModel("plan"),
+          promptVersion: getPromptVersion("plan_revision"),
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          estimatedCostUsd: 0,
+          latencyMs: 0,
+          provider: "party-genie-structured-fallback",
+          usedFallback: true,
+        },
+      },
+    };
+  }
+
+  return {
+    ...generated.data,
+    rawResponse: {
+      provider: generated.usage.provider,
+      generatedAt: new Date().toISOString(),
+      summary: `Revised plan using change type "${changeType}".`,
+      model: generated.usage.model,
+      promptVersion: generated.usage.promptVersion,
+      usage: generated.usage,
+    },
   };
 }
 
