@@ -1,12 +1,17 @@
+import crypto from "node:crypto";
 import { SupabaseClient } from "@supabase/supabase-js";
 import {
+  type AiGenerationType,
   generateInviteCopy,
   generatePartyPlan,
   generateShoppingList,
+  getOpenAIModel,
+  getPromptVersion,
 } from "@/lib/ai/party-genie";
 
 type EventRecord = {
   id: string;
+  owner_id: string;
   title: string;
   event_type: string;
   event_date: string | null;
@@ -21,11 +26,162 @@ type ShoppingListRecord = {
   retailer: "amazon" | "walmart" | "mixed" | null;
 };
 
+type CachedPlanRecord = {
+  id: string;
+  event_id: string;
+  theme: string | null;
+  invite_copy: string | null;
+  menu: string[] | null;
+  shopping_categories:
+    | Array<{ category: string; items: Array<{ name: string; quantity: number }> }>
+    | null;
+  tasks: Array<{ title: string; due_label: string; phase: string }> | null;
+  timeline: Array<{ label: string; detail: string; sort_order: number }> | null;
+  raw_response:
+    | {
+        provider?: string;
+        generatedAt?: string;
+        summary?: string;
+        model?: string;
+        promptVersion?: string;
+        usage?: object;
+      }
+    | null;
+  request_fingerprint: string | null;
+  prompt_version: string | null;
+  model: string | null;
+  summary: string | null;
+};
+
+function buildFingerprint(input: Record<string, unknown>) {
+  const canonical = JSON.stringify(input, Object.keys(input).sort());
+  return crypto.createHash("sha256").update(canonical).digest("hex");
+}
+
+function monthBucket(value: Date) {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), 1))
+    .toISOString()
+    .slice(0, 10);
+}
+
+function normalizePreferences(value: Array<string | null | undefined>) {
+  return value
+    .filter((item): item is string => Boolean(item?.trim()))
+    .map((item) => item.trim().toLowerCase())
+    .sort();
+}
+
+function buildEventFingerprint(event: EventRecord, generationType: AiGenerationType) {
+  const model =
+    generationType === "party_plan"
+      ? getOpenAIModel("plan")
+      : generationType === "premium_concierge"
+        ? getOpenAIModel("premium")
+        : getOpenAIModel("lightweight");
+
+  return {
+    generationType,
+    promptVersion: getPromptVersion(generationType),
+    model,
+    title: event.title.trim().toLowerCase(),
+    eventType: event.event_type.trim().toLowerCase(),
+    eventDate: event.event_date ?? null,
+    location: event.location?.trim().toLowerCase() ?? null,
+    guestTarget: event.guest_target ?? null,
+    budget: event.budget ?? null,
+    theme: event.theme?.trim().toLowerCase() ?? null,
+    preferences: normalizePreferences([event.event_type, event.theme, event.location]),
+  };
+}
+
+async function trackGeneration(
+  supabase: SupabaseClient,
+  {
+    userId,
+    eventId,
+    generationType,
+    model,
+    requestFingerprint,
+    promptVersion,
+    inputTokens,
+    outputTokens,
+    cachedInputTokens,
+    estimatedCostUsd,
+    latencyMs,
+    status,
+  }: {
+    userId: string;
+    eventId: string;
+    generationType: AiGenerationType;
+    model: string;
+    requestFingerprint: string;
+    promptVersion: string;
+    inputTokens: number;
+    outputTokens: number;
+    cachedInputTokens: number;
+    estimatedCostUsd: number;
+    latencyMs: number;
+    status: "success" | "cached" | "fallback" | "error";
+  },
+) {
+  const now = new Date();
+
+  await supabase.from("ai_generations").insert({
+    user_id: userId,
+    event_id: eventId,
+    generation_type: generationType,
+    model,
+    request_fingerprint: requestFingerprint,
+    prompt_version: promptVersion,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    cached_input_tokens: cachedInputTokens,
+    estimated_cost_usd: estimatedCostUsd,
+    latency_ms: latencyMs,
+    status,
+  });
+
+  const usageMonth = monthBucket(now);
+
+  const { data: existingUsage } = await supabase
+    .from("user_usage_monthly")
+    .select("id, requests_count, input_tokens, output_tokens, cached_input_tokens, estimated_cost_usd")
+    .eq("user_id", userId)
+    .eq("usage_month", usageMonth)
+    .maybeSingle<{
+      id: string;
+      requests_count: number;
+      input_tokens: number;
+      output_tokens: number;
+      cached_input_tokens: number;
+      estimated_cost_usd: number;
+    }>();
+
+  const payload = {
+    user_id: userId,
+    usage_month: usageMonth,
+    requests_count: (existingUsage?.requests_count ?? 0) + 1,
+    input_tokens: (existingUsage?.input_tokens ?? 0) + inputTokens,
+    output_tokens: (existingUsage?.output_tokens ?? 0) + outputTokens,
+    cached_input_tokens: (existingUsage?.cached_input_tokens ?? 0) + cachedInputTokens,
+    estimated_cost_usd: Number(
+      ((existingUsage?.estimated_cost_usd ?? 0) + estimatedCostUsd).toFixed(6),
+    ),
+  };
+
+  if (existingUsage) {
+    await supabase.from("user_usage_monthly").update(payload).eq("id", existingUsage.id);
+    return;
+  }
+
+  await supabase.from("user_usage_monthly").insert(payload);
+}
+
 async function loadEventSeed(supabase: SupabaseClient, eventId: string) {
   const [{ data: event, error: eventError }, { count: guestCount }] = await Promise.all([
     supabase
       .from("events")
-      .select("id, title, event_type, event_date, location, guest_target, budget, theme")
+      .select("id, owner_id, title, event_type, event_date, location, guest_target, budget, theme")
       .eq("id", eventId)
       .single<EventRecord>(),
     supabase
@@ -42,6 +198,27 @@ async function loadEventSeed(supabase: SupabaseClient, eventId: string) {
     ...event,
     guest_target: event.guest_target ?? guestCount ?? null,
   };
+}
+
+async function loadCachedPlan(
+  supabase: SupabaseClient,
+  eventId: string,
+  requestFingerprint: string,
+  promptVersion: string,
+  model: string,
+) {
+  const { data } = await supabase
+    .from("party_plans")
+    .select(
+      "id, event_id, theme, invite_copy, menu, shopping_categories, tasks, timeline, raw_response, request_fingerprint, prompt_version, model, summary",
+    )
+    .eq("event_id", eventId)
+    .eq("request_fingerprint", requestFingerprint)
+    .eq("prompt_version", promptVersion)
+    .eq("model", model)
+    .maybeSingle<CachedPlanRecord>();
+
+  return data ?? null;
 }
 
 async function ensureInvite(supabase: SupabaseClient, eventId: string, inviteCopy: string) {
@@ -235,8 +412,79 @@ async function syncTimeline(
   return missingItems.length;
 }
 
-export async function generatePlanForEvent(supabase: SupabaseClient, eventId: string) {
+export async function generatePlanForEvent(
+  supabase: SupabaseClient,
+  eventId: string,
+  options?: { forceRegenerate?: boolean },
+) {
   const event = await loadEventSeed(supabase, eventId);
+  const fingerprintInput = buildEventFingerprint(event, "party_plan");
+  const requestFingerprint = buildFingerprint(fingerprintInput);
+  const promptVersion = getPromptVersion("party_plan");
+  const model = getOpenAIModel("plan");
+
+  if (!options?.forceRegenerate) {
+    const cachedPlan = await loadCachedPlan(
+      supabase,
+      eventId,
+      requestFingerprint,
+      promptVersion,
+      model,
+    );
+
+    if (cachedPlan) {
+      await trackGeneration(supabase, {
+        userId: event.owner_id,
+        eventId,
+        generationType: "party_plan",
+        model,
+        requestFingerprint,
+        promptVersion,
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        estimatedCostUsd: 0,
+        latencyMs: 0,
+        status: "cached",
+      });
+
+      return {
+        theme: cachedPlan.theme ?? getThemeFromEvent(event),
+        inviteCopy: cachedPlan.invite_copy ?? "",
+        menu: cachedPlan.menu ?? [],
+        shoppingCategories: cachedPlan.shopping_categories ?? [],
+        shoppingItems: [],
+        tasks: cachedPlan.tasks ?? [],
+        timeline: cachedPlan.timeline ?? [],
+        rawResponse: {
+          provider: cachedPlan.raw_response?.provider ?? "party-plan-cache",
+          generatedAt: cachedPlan.raw_response?.generatedAt ?? new Date().toISOString(),
+          summary: cachedPlan.summary ?? "Returned cached plan from Supabase.",
+          model: cachedPlan.model ?? model,
+          promptVersion: cachedPlan.prompt_version ?? promptVersion,
+          usage: {
+            model: cachedPlan.model ?? model,
+            promptVersion: cachedPlan.prompt_version ?? promptVersion,
+            inputTokens: 0,
+            outputTokens: 0,
+            cachedInputTokens: 0,
+            estimatedCostUsd: 0,
+            latencyMs: 0,
+            provider: "party-plan-cache",
+            usedFallback: false,
+          },
+        },
+        synced: {
+          shoppingItemsAdded: 0,
+          tasksAdded: 0,
+          timelineAdded: 0,
+          estimatedTotal: 0,
+          cacheHit: true,
+        },
+      };
+    }
+  }
+
   const generated = await generatePartyPlan(event);
 
   await ensureInvite(supabase, eventId, generated.inviteCopy);
@@ -257,6 +505,11 @@ export async function generatePlanForEvent(supabase: SupabaseClient, eventId: st
       timeline: generated.timeline.map(({ label, detail }) => ({ label, detail })),
       raw_response: generated.rawResponse,
       generated_at: new Date().toISOString(),
+      request_fingerprint: requestFingerprint,
+      prompt_version: generated.rawResponse.promptVersion ?? promptVersion,
+      model: generated.rawResponse.model ?? model,
+      status: "ready",
+      summary: generated.rawResponse.summary,
     },
     { onConflict: "event_id" },
   );
@@ -264,6 +517,22 @@ export async function generatePlanForEvent(supabase: SupabaseClient, eventId: st
   if (planError) {
     throw new Error(planError.message);
   }
+
+  const usage = generated.rawResponse.usage;
+  await trackGeneration(supabase, {
+    userId: event.owner_id,
+    eventId,
+    generationType: "party_plan",
+    model: generated.rawResponse.model ?? model,
+    requestFingerprint,
+    promptVersion: generated.rawResponse.promptVersion ?? promptVersion,
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+    cachedInputTokens: usage?.cachedInputTokens ?? 0,
+    estimatedCostUsd: usage?.estimatedCostUsd ?? 0,
+    latencyMs: usage?.latencyMs ?? 0,
+    status: usage?.usedFallback ? "fallback" : "success",
+  });
 
   return {
     theme: generated.theme,
@@ -277,14 +546,22 @@ export async function generatePlanForEvent(supabase: SupabaseClient, eventId: st
       tasksAdded,
       timelineAdded,
       estimatedTotal: shoppingSummary.estimatedTotal,
+      cacheHit: false,
     },
   };
 }
 
-export async function generateInviteCopyForEvent(supabase: SupabaseClient, eventId: string) {
+export async function generateInviteCopyForEvent(
+  supabase: SupabaseClient,
+  eventId: string,
+) {
   const event = await loadEventSeed(supabase, eventId);
   const generated = await generateInviteCopy(event);
   const inviteCopy = generated.inviteCopy;
+  const fingerprintInput = buildEventFingerprint(event, "invitation_text");
+  const requestFingerprint = buildFingerprint(fingerprintInput);
+  const promptVersion = generated.rawResponse.promptVersion ?? getPromptVersion("invitation_text");
+  const model = generated.rawResponse.model ?? getOpenAIModel("lightweight");
 
   await ensureInvite(supabase, eventId, inviteCopy);
 
@@ -297,9 +574,30 @@ export async function generateInviteCopyForEvent(supabase: SupabaseClient, event
         invite_copy: inviteCopy,
         generated_at: new Date().toISOString(),
         raw_response: generated.rawResponse,
+        request_fingerprint: requestFingerprint,
+        prompt_version: promptVersion,
+        model,
+        status: "ready",
+        summary: generated.rawResponse.summary,
       },
       { onConflict: "event_id" },
     );
+
+  const usage = generated.rawResponse.usage;
+  await trackGeneration(supabase, {
+    userId: event.owner_id,
+    eventId,
+    generationType: "invitation_text",
+    model,
+    requestFingerprint,
+    promptVersion,
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+    cachedInputTokens: usage?.cachedInputTokens ?? 0,
+    estimatedCostUsd: usage?.estimatedCostUsd ?? 0,
+    latencyMs: usage?.latencyMs ?? 0,
+    status: usage?.usedFallback ? "fallback" : "success",
+  });
 
   return { inviteCopy };
 }
@@ -313,6 +611,11 @@ export async function generateShoppingListForEvent(supabase: SupabaseClient, eve
   const shoppingList = await ensureShoppingList(supabase, eventId);
   const generated = await generateShoppingList(event);
   const shoppingSummary = await syncShoppingItems(supabase, shoppingList.id, generated.shoppingItems);
+  const fingerprintInput = buildEventFingerprint(event, "shopping_list_transform");
+  const requestFingerprint = buildFingerprint(fingerprintInput);
+  const promptVersion =
+    generated.rawResponse.promptVersion ?? getPromptVersion("shopping_list_transform");
+  const model = generated.rawResponse.model ?? getOpenAIModel("lightweight");
 
   await supabase
     .from("party_plans")
@@ -323,9 +626,30 @@ export async function generateShoppingListForEvent(supabase: SupabaseClient, eve
         shopping_categories: generated.shoppingCategories,
         generated_at: new Date().toISOString(),
         raw_response: generated.rawResponse,
+        request_fingerprint: requestFingerprint,
+        prompt_version: promptVersion,
+        model,
+        status: "ready",
+        summary: generated.rawResponse.summary,
       },
       { onConflict: "event_id" },
     );
+
+  const usage = generated.rawResponse.usage;
+  await trackGeneration(supabase, {
+    userId: event.owner_id,
+    eventId,
+    generationType: "shopping_list_transform",
+    model,
+    requestFingerprint,
+    promptVersion,
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+    cachedInputTokens: usage?.cachedInputTokens ?? 0,
+    estimatedCostUsd: usage?.estimatedCostUsd ?? 0,
+    latencyMs: usage?.latencyMs ?? 0,
+    status: usage?.usedFallback ? "fallback" : "success",
+  });
 
   return {
     shoppingCategories: generated.shoppingCategories,

@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const bodySchema = z.object({
   eventId: z.string().uuid(),
+  forceRegenerate: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -31,7 +32,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const plan = await generatePlanForEvent(supabase, parsed.data.eventId);
+    const plan = await generatePlanForEvent(supabase, parsed.data.eventId, {
+      forceRegenerate: parsed.data.forceRegenerate ?? false,
+    });
     return NextResponse.json({ ok: true, plan });
   } catch (error) {
     return NextResponse.json(

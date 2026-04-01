@@ -46,7 +46,27 @@ export type GeneratedPartyPlan = {
     generatedAt: string;
     summary: string;
     model?: string;
+    promptVersion?: string;
+    usage?: AiUsageMetadata;
   };
+};
+
+export type AiGenerationType =
+  | "party_plan"
+  | "invitation_text"
+  | "shopping_list_transform"
+  | "premium_concierge";
+
+export type AiUsageMetadata = {
+  model: string;
+  promptVersion: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  estimatedCostUsd: number;
+  latencyMs: number;
+  provider: string;
+  usedFallback: boolean;
 };
 
 const generatedTaskSchema = z.object({
@@ -99,6 +119,20 @@ const generatedShoppingListSchema = z.object({
 });
 
 type AiTaskType = "plan" | "lightweight" | "premium";
+const PROMPT_VERSIONS: Record<AiGenerationType, string> = {
+  party_plan: "party-plan-v2",
+  invitation_text: "invitation-text-v2",
+  shopping_list_transform: "shopping-list-v2",
+  premium_concierge: "premium-concierge-v1",
+};
+const MODEL_PRICING: Record<
+  string,
+  { input: number; cachedInput: number; output: number }
+> = {
+  "gpt-5.4-nano": { input: 0.2, cachedInput: 0.02, output: 1.25 },
+  "gpt-5.4-mini": { input: 0.75, cachedInput: 0.075, output: 4.5 },
+  "gpt-5.4": { input: 2.5, cachedInput: 0.25, output: 15 },
+};
 
 function getOpenAIClient() {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -131,6 +165,38 @@ function getOpenAIModel(taskType: AiTaskType) {
     process.env.OPENAI_MODEL_LIGHTWEIGHT?.trim() ||
     process.env.OPENAI_MODEL_NANO?.trim() ||
     "gpt-5.4-nano"
+  );
+}
+
+function getPromptVersion(generationType: AiGenerationType) {
+  return PROMPT_VERSIONS[generationType];
+}
+
+function estimateCostUsd({
+  model,
+  inputTokens,
+  outputTokens,
+  cachedInputTokens,
+}: {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+}) {
+  const pricing = MODEL_PRICING[model];
+
+  if (!pricing) {
+    return 0;
+  }
+
+  const uncachedInputTokens = Math.max(0, inputTokens - cachedInputTokens);
+
+  return Number(
+    (
+      (uncachedInputTokens / 1_000_000) * pricing.input +
+      (cachedInputTokens / 1_000_000) * pricing.cachedInput +
+      (outputTokens / 1_000_000) * pricing.output
+    ).toFixed(6),
   );
 }
 
@@ -289,11 +355,13 @@ function extractJsonObject(rawText: string) {
 }
 
 async function generateStructuredObject<T>({
+  generationType,
   taskType,
   systemPrompt,
   userPrompt,
   schema,
 }: {
+  generationType: AiGenerationType;
   taskType: AiTaskType;
   systemPrompt: string;
   userPrompt: string;
@@ -306,6 +374,7 @@ async function generateStructuredObject<T>({
   }
 
   const model = getOpenAIModel(taskType);
+  const startedAt = Date.now();
   const response = await client.responses.create({
     model,
     input: [
@@ -324,16 +393,31 @@ async function generateStructuredObject<T>({
       },
     ],
   });
+  const inputTokens = response.usage?.input_tokens ?? 0;
+  const outputTokens = response.usage?.output_tokens ?? 0;
+  const cachedInputTokens =
+    response.usage?.input_tokens_details?.cached_tokens ?? 0;
+  const promptVersion = getPromptVersion(generationType);
 
   const parsed = schema.parse(extractJsonObject(response.output_text));
 
   return {
     data: parsed,
-    rawResponse: {
-      provider: "openai-responses",
-      generatedAt: new Date().toISOString(),
-      summary: "Generated using the OpenAI Responses API.",
+    usage: {
       model,
+      promptVersion,
+      inputTokens,
+      outputTokens,
+      cachedInputTokens,
+      estimatedCostUsd: estimateCostUsd({
+        model,
+        inputTokens,
+        outputTokens,
+        cachedInputTokens,
+      }),
+      latencyMs: Date.now() - startedAt,
+      provider: "openai-responses",
+      usedFallback: false,
     },
   };
 }
@@ -390,6 +474,7 @@ export function buildShoppingList(event: EventSeed) {
 export async function generatePartyPlan(event: EventSeed): Promise<GeneratedPartyPlan> {
   const fallback = buildPartyPlan(event);
   const generated = await generateStructuredObject({
+    generationType: "party_plan",
     taskType: "plan",
     systemPrompt:
       "You are PartyGenie, an event planning assistant. Create practical host-ready party plans that are realistic, concise, and easy to execute.",
@@ -404,18 +489,44 @@ export async function generatePartyPlan(event: EventSeed): Promise<GeneratedPart
   }).catch(() => null);
 
   if (!generated) {
-    return fallback;
+    return {
+      ...fallback,
+      rawResponse: {
+        ...fallback.rawResponse,
+        model: getOpenAIModel("plan"),
+        promptVersion: getPromptVersion("party_plan"),
+        usage: {
+          model: getOpenAIModel("plan"),
+          promptVersion: getPromptVersion("party_plan"),
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          estimatedCostUsd: 0,
+          latencyMs: 0,
+          provider: "party-genie-structured-fallback",
+          usedFallback: true,
+        },
+      } as GeneratedPartyPlan["rawResponse"],
+    };
   }
 
   return {
     ...generated.data,
-    rawResponse: generated.rawResponse,
+    rawResponse: {
+      provider: generated.usage.provider,
+      generatedAt: new Date().toISOString(),
+      summary: "Generated using the OpenAI Responses API.",
+      model: generated.usage.model,
+      promptVersion: generated.usage.promptVersion,
+      usage: generated.usage,
+    },
   };
 }
 
 export async function generateInviteCopy(event: EventSeed) {
   const fallback = buildInviteCopy(event);
   const generated = await generateStructuredObject({
+    generationType: "invitation_text",
     taskType: "lightweight",
     systemPrompt:
       "You write polished invitation copy for event hosts. Keep the tone warm, specific, and ready to send.",
@@ -433,19 +544,40 @@ export async function generateInviteCopy(event: EventSeed) {
         provider: "party-genie-structured-fallback",
         generatedAt: new Date().toISOString(),
         summary: "Generated invite copy using the local fallback planner.",
+        model: getOpenAIModel("lightweight"),
+        promptVersion: getPromptVersion("invitation_text"),
+        usage: {
+          model: getOpenAIModel("lightweight"),
+          promptVersion: getPromptVersion("invitation_text"),
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          estimatedCostUsd: 0,
+          latencyMs: 0,
+          provider: "party-genie-structured-fallback",
+          usedFallback: true,
+        },
       },
     };
   }
 
   return {
     inviteCopy: generated.data.inviteCopy,
-    rawResponse: generated.rawResponse,
+    rawResponse: {
+      provider: generated.usage.provider,
+      generatedAt: new Date().toISOString(),
+      summary: "Generated using the OpenAI Responses API.",
+      model: generated.usage.model,
+      promptVersion: generated.usage.promptVersion,
+      usage: generated.usage,
+    },
   };
 }
 
 export async function generateShoppingList(event: EventSeed) {
   const fallback = buildShoppingList(event);
   const generated = await generateStructuredObject({
+    generationType: "shopping_list_transform",
     taskType: "lightweight",
     systemPrompt:
       "You build concise shopping lists for event hosts. Focus on realistic, high-signal items only.",
@@ -464,14 +596,35 @@ export async function generateShoppingList(event: EventSeed) {
         provider: "party-genie-structured-fallback",
         generatedAt: new Date().toISOString(),
         summary: "Generated shopping list using the local fallback planner.",
+        model: getOpenAIModel("lightweight"),
+        promptVersion: getPromptVersion("shopping_list_transform"),
+        usage: {
+          model: getOpenAIModel("lightweight"),
+          promptVersion: getPromptVersion("shopping_list_transform"),
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          estimatedCostUsd: 0,
+          latencyMs: 0,
+          provider: "party-genie-structured-fallback",
+          usedFallback: true,
+        },
       },
     };
   }
 
   return {
     ...generated.data,
-    rawResponse: generated.rawResponse,
+    rawResponse: {
+      provider: generated.usage.provider,
+      generatedAt: new Date().toISOString(),
+      summary: "Generated using the OpenAI Responses API.",
+      model: generated.usage.model,
+      promptVersion: generated.usage.promptVersion,
+      usage: generated.usage,
+    },
   };
 }
 
+export { getOpenAIModel, getPromptVersion };
 export type { EventSeed, GeneratedShoppingItem };
