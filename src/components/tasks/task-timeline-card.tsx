@@ -1,4 +1,9 @@
-import { addTaskAction, toggleTaskStatusAction } from "@/app/events/actions";
+import {
+  addTaskAction,
+  deleteTaskAction,
+  toggleTaskStatusAction,
+  updateTaskAction,
+} from "@/app/events/actions";
 import { type TaskDetails, type TimelineItemDetails } from "@/lib/events";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,8 +25,9 @@ export function TaskTimelineCard({
     "Day-of timeline": timelineItems.map((item) => ({
       id: item.id,
       title: `${item.label}: ${item.detail}`,
-      status: "pending",
+      status: "pending" as const,
       due_label: item.starts_at,
+      phase: "",
     })),
   };
 
@@ -73,23 +79,79 @@ export function TaskTimelineCard({
                     <div key={task.id} className="rounded-2xl bg-canvas px-4 py-3 text-sm text-ink">
                       <p>{task.title}</p>
                       {"status" in task && task.status ? (
-                        <div className="mt-2 flex items-center justify-between gap-3">
-                          <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">
-                            {task.status} {task.due_label ? `- ${task.due_label}` : ""}
-                          </p>
-                          <form action={toggleTaskStatusAction}>
+                        <>
+                          <div className="mt-2 flex items-center justify-between gap-3">
+                            <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">
+                              {task.status} {task.due_label ? `- ${task.due_label}` : ""}
+                            </p>
+                            <form action={toggleTaskStatusAction}>
+                              <input type="hidden" name="eventId" value={eventId} />
+                              <input type="hidden" name="taskId" value={task.id} />
+                              <input
+                                type="hidden"
+                                name="nextStatus"
+                                value={task.status === "completed" ? "pending" : "completed"}
+                              />
+                              <button type="submit" className="text-xs font-medium text-brand">
+                                {task.status === "completed" ? "Reopen" : "Complete"}
+                              </button>
+                            </form>
+                          </div>
+                          <form action={updateTaskAction} className="mt-4 grid gap-3">
                             <input type="hidden" name="eventId" value={eventId} />
                             <input type="hidden" name="taskId" value={task.id} />
-                            <input
-                              type="hidden"
-                              name="nextStatus"
-                              value={task.status === "completed" ? "pending" : "completed"}
-                            />
-                            <button type="submit" className="text-xs font-medium text-brand">
-                              {task.status === "completed" ? "Reopen" : "Complete"}
-                            </button>
+                            <div className="space-y-2">
+                              <Label htmlFor={`task-title-${task.id}`}>Task title</Label>
+                              <Input
+                                id={`task-title-${task.id}`}
+                                name="title"
+                                defaultValue={task.title}
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`task-phase-${task.id}`}>Phase</Label>
+                              <Input
+                                id={`task-phase-${task.id}`}
+                                name="phase"
+                                defaultValue={task.phase ?? ""}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`task-due-${task.id}`}>Due label</Label>
+                              <Input
+                                id={`task-due-${task.id}`}
+                                name="dueLabel"
+                                defaultValue={task.due_label ?? ""}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`task-status-${task.id}`}>Status</Label>
+                              <select
+                                id={`task-status-${task.id}`}
+                                name="status"
+                                defaultValue={task.status}
+                                className="w-full rounded-2xl border border-border bg-white px-4 py-3 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-4 focus:ring-brand/10"
+                              >
+                                <option value="pending">Pending</option>
+                                <option value="completed">Completed</option>
+                                <option value="overdue">Overdue</option>
+                              </select>
+                            </div>
+                            <div className="flex flex-wrap gap-3">
+                              <SubmitButton pendingLabel="Saving task..." variant="secondary">
+                                Save task
+                              </SubmitButton>
+                            </div>
                           </form>
-                        </div>
+                          <form action={deleteTaskAction} className="mt-3">
+                            <input type="hidden" name="eventId" value={eventId} />
+                            <input type="hidden" name="taskId" value={task.id} />
+                            <SubmitButton pendingLabel="Deleting task..." variant="ghost">
+                              Delete task
+                            </SubmitButton>
+                          </form>
+                        </>
                       ) : null}
                     </div>
                   ))

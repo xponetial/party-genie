@@ -37,6 +37,16 @@ const guestSchema = z.object({
   plusOneCount: z.coerce.number().int().min(0).default(0),
 });
 
+const updateGuestSchema = guestSchema.extend({
+  guestId: z.string().uuid(),
+  status: z.enum(["pending", "confirmed", "declined"]),
+});
+
+const deleteGuestSchema = z.object({
+  eventId: z.string().uuid(),
+  guestId: z.string().uuid(),
+});
+
 const inviteSchema = z.object({
   eventId: z.string().uuid(),
   inviteId: z.string().uuid(),
@@ -54,6 +64,17 @@ const shoppingItemSchema = z.object({
   externalUrl: z.url().optional().or(z.literal("")),
 });
 
+const updateShoppingItemSchema = shoppingItemSchema.extend({
+  itemId: z.string().uuid(),
+  status: z.enum(["pending", "ready", "purchased", "removed"]),
+});
+
+const deleteShoppingItemSchema = z.object({
+  eventId: z.string().uuid(),
+  shoppingListId: z.string().uuid(),
+  itemId: z.string().uuid(),
+});
+
 const shoppingSettingsSchema = z.object({
   eventId: z.string().uuid(),
   shoppingListId: z.string().uuid(),
@@ -65,6 +86,16 @@ const taskSchema = z.object({
   title: z.string().trim().min(2),
   dueLabel: z.string().trim().optional(),
   phase: z.string().trim().optional(),
+});
+
+const updateTaskSchema = taskSchema.extend({
+  taskId: z.string().uuid(),
+  status: z.enum(["pending", "completed", "overdue"]),
+});
+
+const deleteTaskSchema = z.object({
+  eventId: z.string().uuid(),
+  taskId: z.string().uuid(),
 });
 
 const toggleTaskSchema = z.object({
@@ -95,6 +126,25 @@ async function requireUser() {
   }
 
   return { supabase, user };
+}
+
+async function updateShoppingListEstimate(supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>, shoppingListId: string) {
+  const { data: items } = await supabase
+    .from("shopping_items")
+    .select("estimated_price, quantity")
+    .eq("shopping_list_id", shoppingListId)
+    .neq("status", "removed")
+    .returns<Array<{ estimated_price: number | null; quantity: number }>>();
+
+  const estimatedTotal = (items ?? []).reduce(
+    (sum, item) => sum + (item.estimated_price ?? 0) * item.quantity,
+    0,
+  );
+
+  await supabase
+    .from("shopping_lists")
+    .update({ estimated_total: estimatedTotal })
+    .eq("id", shoppingListId);
 }
 
 export async function createEventAction(formData: FormData) {
@@ -251,6 +301,57 @@ export async function addGuestAction(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+export async function updateGuestAction(formData: FormData) {
+  const { supabase } = await requireUser();
+  const parsed = updateGuestSchema.safeParse({
+    eventId: formData.get("eventId"),
+    guestId: formData.get("guestId"),
+    name: formData.get("name"),
+    email: formData.get("email") || "",
+    phone: formData.get("phone") || "",
+    plusOneCount: formData.get("plusOneCount") || 0,
+    status: formData.get("status"),
+  });
+
+  if (!parsed.success) return;
+
+  const normalizedPlusOnes =
+    parsed.data.status === "confirmed" ? parsed.data.plusOneCount : 0;
+
+  await supabase
+    .from("guests")
+    .update({
+      name: parsed.data.name,
+      email: parsed.data.email || null,
+      phone: parsed.data.phone?.trim() || null,
+      plus_one_count: normalizedPlusOnes,
+      status: parsed.data.status,
+    })
+    .eq("id", parsed.data.guestId);
+
+  revalidatePath(`/events/${parsed.data.eventId}`);
+  revalidatePath(`/events/${parsed.data.eventId}/guests`);
+  revalidatePath(`/events/${parsed.data.eventId}/invite`);
+  revalidatePath("/dashboard");
+}
+
+export async function deleteGuestAction(formData: FormData) {
+  const { supabase } = await requireUser();
+  const parsed = deleteGuestSchema.safeParse({
+    eventId: formData.get("eventId"),
+    guestId: formData.get("guestId"),
+  });
+
+  if (!parsed.success) return;
+
+  await supabase.from("guests").delete().eq("id", parsed.data.guestId);
+
+  revalidatePath(`/events/${parsed.data.eventId}`);
+  revalidatePath(`/events/${parsed.data.eventId}/guests`);
+  revalidatePath(`/events/${parsed.data.eventId}/invite`);
+  revalidatePath("/dashboard");
+}
+
 export async function addShoppingItemAction(formData: FormData) {
   const { supabase } = await requireUser();
   const parsed = shoppingItemSchema.safeParse({
@@ -274,21 +375,60 @@ export async function addShoppingItemAction(formData: FormData) {
     external_url: parsed.data.externalUrl || null,
   });
 
-  const { data: items } = await supabase
-    .from("shopping_items")
-    .select("estimated_price, quantity")
-    .eq("shopping_list_id", parsed.data.shoppingListId)
-    .returns<Array<{ estimated_price: number | null; quantity: number }>>();
+  await updateShoppingListEstimate(supabase, parsed.data.shoppingListId);
 
-  const estimatedTotal = (items ?? []).reduce(
-    (sum, item) => sum + (item.estimated_price ?? 0) * item.quantity,
-    0,
-  );
+  revalidatePath(`/events/${parsed.data.eventId}`);
+  revalidatePath(`/events/${parsed.data.eventId}/shopping`);
+  revalidatePath("/dashboard");
+}
+
+export async function updateShoppingItemAction(formData: FormData) {
+  const { supabase } = await requireUser();
+  const parsed = updateShoppingItemSchema.safeParse({
+    eventId: formData.get("eventId"),
+    shoppingListId: formData.get("shoppingListId"),
+    itemId: formData.get("itemId"),
+    category: formData.get("category"),
+    name: formData.get("name"),
+    quantity: formData.get("quantity"),
+    estimatedPrice: formData.get("estimatedPrice"),
+    externalUrl: formData.get("externalUrl") || "",
+    status: formData.get("status"),
+  });
+
+  if (!parsed.success) return;
 
   await supabase
-    .from("shopping_lists")
-    .update({ estimated_total: estimatedTotal })
-    .eq("id", parsed.data.shoppingListId);
+    .from("shopping_items")
+    .update({
+      category: parsed.data.category,
+      name: parsed.data.name,
+      quantity: parsed.data.quantity,
+      estimated_price: parsed.data.estimatedPrice ?? null,
+      external_url: parsed.data.externalUrl || null,
+      status: parsed.data.status,
+    })
+    .eq("id", parsed.data.itemId);
+
+  await updateShoppingListEstimate(supabase, parsed.data.shoppingListId);
+
+  revalidatePath(`/events/${parsed.data.eventId}`);
+  revalidatePath(`/events/${parsed.data.eventId}/shopping`);
+  revalidatePath("/dashboard");
+}
+
+export async function deleteShoppingItemAction(formData: FormData) {
+  const { supabase } = await requireUser();
+  const parsed = deleteShoppingItemSchema.safeParse({
+    eventId: formData.get("eventId"),
+    shoppingListId: formData.get("shoppingListId"),
+    itemId: formData.get("itemId"),
+  });
+
+  if (!parsed.success) return;
+
+  await supabase.from("shopping_items").delete().eq("id", parsed.data.itemId);
+  await updateShoppingListEstimate(supabase, parsed.data.shoppingListId);
 
   revalidatePath(`/events/${parsed.data.eventId}`);
   revalidatePath(`/events/${parsed.data.eventId}/shopping`);
@@ -330,6 +470,51 @@ export async function addTaskAction(formData: FormData) {
     due_label: parsed.data.dueLabel || null,
     phase: parsed.data.phase || null,
   });
+
+  revalidatePath(`/events/${parsed.data.eventId}`);
+  revalidatePath(`/events/${parsed.data.eventId}/timeline`);
+  revalidatePath("/dashboard");
+}
+
+export async function updateTaskAction(formData: FormData) {
+  const { supabase } = await requireUser();
+  const parsed = updateTaskSchema.safeParse({
+    eventId: formData.get("eventId"),
+    taskId: formData.get("taskId"),
+    title: formData.get("title"),
+    dueLabel: formData.get("dueLabel") || "",
+    phase: formData.get("phase") || "",
+    status: formData.get("status"),
+  });
+
+  if (!parsed.success) return;
+
+  await supabase
+    .from("tasks")
+    .update({
+      title: parsed.data.title,
+      due_label: parsed.data.dueLabel || null,
+      phase: parsed.data.phase || null,
+      status: parsed.data.status,
+      completed_at: parsed.data.status === "completed" ? new Date().toISOString() : null,
+    })
+    .eq("id", parsed.data.taskId);
+
+  revalidatePath(`/events/${parsed.data.eventId}`);
+  revalidatePath(`/events/${parsed.data.eventId}/timeline`);
+  revalidatePath("/dashboard");
+}
+
+export async function deleteTaskAction(formData: FormData) {
+  const { supabase } = await requireUser();
+  const parsed = deleteTaskSchema.safeParse({
+    eventId: formData.get("eventId"),
+    taskId: formData.get("taskId"),
+  });
+
+  if (!parsed.success) return;
+
+  await supabase.from("tasks").delete().eq("id", parsed.data.taskId);
 
   revalidatePath(`/events/${parsed.data.eventId}`);
   revalidatePath(`/events/${parsed.data.eventId}/timeline`);

@@ -1,4 +1,4 @@
-import { addGuestAction } from "@/app/events/actions";
+import { addGuestAction, deleteGuestAction, updateGuestAction } from "@/app/events/actions";
 import { type GuestDetails, type InviteDetails } from "@/lib/events";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -55,45 +55,94 @@ export function GuestListCard({
           </div>
         </form>
 
-        <div className="mt-6 overflow-hidden rounded-[1.5rem] border border-border">
-          <table className="min-w-full bg-white/80 text-left text-sm">
-            <thead className="bg-canvas text-ink-muted">
-              <tr>
-                <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Plus one</th>
-                <th className="px-4 py-3 font-medium">Contact</th>
-                <th className="px-4 py-3 font-medium">RSVP link</th>
-              </tr>
-            </thead>
-            <tbody>
-              {guests.length ? (
-                guests.map((guest) => (
-                  <tr key={guest.id} className="border-t border-border">
-                    <td className="px-4 py-3 text-ink">{guest.name}</td>
-                    <td className="px-4 py-3 text-ink-muted">{guest.status}</td>
-                    <td className="px-4 py-3 text-ink-muted">{guest.plus_one_count}</td>
-                    <td className="px-4 py-3 text-ink-muted">{guest.email ?? guest.phone ?? "Not provided"}</td>
-                    <td className="px-4 py-3 text-ink-muted">
-                      {invite?.is_public ? (
-                        <span className="break-all text-xs text-brand">
-                          {`/rsvp/${invite.public_slug}?guest=${guest.rsvp_token}`}
-                        </span>
-                      ) : (
-                        "Enable public invite first"
-                      )}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-ink-muted">
-                    No guests yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="mt-6 grid gap-4">
+          {guests.length ? (
+            guests.map((guest) => (
+              <div key={guest.id} className="rounded-[1.5rem] border border-border bg-white/80 p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-lg font-semibold text-ink">{guest.name}</p>
+                    <p className="mt-1 text-sm text-ink-muted">
+                      {guest.email ?? guest.phone ?? "No contact info yet"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.18em] text-ink-muted">
+                    <span className="rounded-full bg-canvas px-3 py-2">{guest.status}</span>
+                    <span className="rounded-full bg-canvas px-3 py-2">
+                      Plus-ones: {guest.plus_one_count}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-3xl bg-canvas px-4 py-3 text-sm text-ink-muted">
+                  {invite?.is_public ? (
+                    <span className="break-all text-brand">
+                      {`/rsvp/${invite.public_slug}?guest=${guest.rsvp_token}`}
+                    </span>
+                  ) : (
+                    "Enable public invite first to generate a live RSVP link."
+                  )}
+                </div>
+
+                <form action={updateGuestAction} className="mt-4 grid gap-4 md:grid-cols-2">
+                  <input type="hidden" name="eventId" value={eventId} />
+                  <input type="hidden" name="guestId" value={guest.id} />
+                  <div className="space-y-2">
+                    <Label htmlFor={`guest-name-${guest.id}`}>Name</Label>
+                    <Input id={`guest-name-${guest.id}`} name="name" defaultValue={guest.name} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`guest-status-${guest.id}`}>Status</Label>
+                    <select
+                      id={`guest-status-${guest.id}`}
+                      name="status"
+                      defaultValue={guest.status}
+                      className="w-full rounded-2xl border border-border bg-white px-4 py-3 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-4 focus:ring-brand/10"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="confirmed">Confirmed</option>
+                      <option value="declined">Declined</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`guest-email-${guest.id}`}>Email</Label>
+                    <Input id={`guest-email-${guest.id}`} name="email" type="email" defaultValue={guest.email ?? ""} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`guest-phone-${guest.id}`}>Phone</Label>
+                    <Input id={`guest-phone-${guest.id}`} name="phone" defaultValue={guest.phone ?? ""} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`guest-plus-one-${guest.id}`}>Plus-ones</Label>
+                    <Input
+                      id={`guest-plus-one-${guest.id}`}
+                      name="plusOneCount"
+                      type="number"
+                      min="0"
+                      defaultValue={String(guest.plus_one_count)}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <SubmitButton pendingLabel="Saving guest..." variant="secondary">
+                      Save guest
+                    </SubmitButton>
+                  </div>
+                </form>
+
+                <form action={deleteGuestAction} className="mt-3">
+                  <input type="hidden" name="eventId" value={eventId} />
+                  <input type="hidden" name="guestId" value={guest.id} />
+                  <SubmitButton pendingLabel="Removing guest..." variant="ghost">
+                    Remove guest
+                  </SubmitButton>
+                </form>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-[1.5rem] border border-border bg-white/80 p-6 text-center text-ink-muted">
+              No guests yet.
+            </div>
+          )}
         </div>
       </Card>
 

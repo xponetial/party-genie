@@ -1,4 +1,9 @@
-import { addShoppingItemAction, updateShoppingSettingsAction } from "@/app/events/actions";
+import {
+  addShoppingItemAction,
+  deleteShoppingItemAction,
+  updateShoppingItemAction,
+  updateShoppingSettingsAction,
+} from "@/app/events/actions";
 import { AiGenerateButton } from "@/components/ai/ai-generate-button";
 import { type ShoppingItemDetails, type ShoppingListDetails } from "@/lib/events";
 import { Card } from "@/components/ui/card";
@@ -80,11 +85,97 @@ export function ShoppingListCard({
         <div className="mt-6 grid gap-3">
           {items.length ? (
             items.map((item) => (
-              <div key={item.id} className="grid gap-3 rounded-3xl border border-border bg-white/80 p-4 md:grid-cols-[0.8fr_1.2fr_0.5fr_0.5fr]">
-                <p className="text-sm font-medium text-ink-muted">{item.category}</p>
-                <p className="font-medium text-ink">{item.name}</p>
-                <p className="text-sm text-ink-muted">Qty {item.quantity}</p>
-                <p className="text-sm text-ink-muted">{formatMoney(item.estimated_price)}</p>
+              <div key={item.id} className="rounded-3xl border border-border bg-white/80 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-ink-muted">{item.category}</p>
+                    <p className="mt-1 text-lg font-semibold text-ink">{item.name}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.18em] text-ink-muted">
+                    <span className="rounded-full bg-canvas px-3 py-2">{item.status}</span>
+                    <span className="rounded-full bg-canvas px-3 py-2">Qty {item.quantity}</span>
+                    <span className="rounded-full bg-canvas px-3 py-2">
+                      {formatMoney(item.estimated_price)}
+                    </span>
+                  </div>
+                </div>
+
+                <form action={updateShoppingItemAction} className="mt-4 grid gap-4 md:grid-cols-2">
+                  <input type="hidden" name="eventId" value={eventId} />
+                  <input type="hidden" name="shoppingListId" value={shoppingList?.id ?? ""} />
+                  <input type="hidden" name="itemId" value={item.id} />
+                  <div className="space-y-2">
+                    <Label htmlFor={`item-category-${item.id}`}>Category</Label>
+                    <Input
+                      id={`item-category-${item.id}`}
+                      name="category"
+                      defaultValue={item.category}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`item-name-${item.id}`}>Item</Label>
+                    <Input id={`item-name-${item.id}`} name="name" defaultValue={item.name} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`item-quantity-${item.id}`}>Quantity</Label>
+                    <Input
+                      id={`item-quantity-${item.id}`}
+                      name="quantity"
+                      type="number"
+                      min="1"
+                      defaultValue={String(item.quantity)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`item-price-${item.id}`}>Estimated price</Label>
+                    <Input
+                      id={`item-price-${item.id}`}
+                      name="estimatedPrice"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      defaultValue={item.estimated_price == null ? "" : String(item.estimated_price)}
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor={`item-url-${item.id}`}>Retailer URL</Label>
+                    <Input
+                      id={`item-url-${item.id}`}
+                      name="externalUrl"
+                      defaultValue={item.external_url ?? ""}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`item-status-${item.id}`}>Status</Label>
+                    <select
+                      id={`item-status-${item.id}`}
+                      name="status"
+                      defaultValue={item.status}
+                      className="w-full rounded-2xl border border-border bg-white px-4 py-3 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-4 focus:ring-brand/10"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="ready">Ready</option>
+                      <option value="purchased">Purchased</option>
+                      <option value="removed">Removed</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <SubmitButton pendingLabel="Saving item..." variant="secondary">
+                      Save item
+                    </SubmitButton>
+                  </div>
+                </form>
+
+                <form action={deleteShoppingItemAction} className="mt-3">
+                  <input type="hidden" name="eventId" value={eventId} />
+                  <input type="hidden" name="shoppingListId" value={shoppingList?.id ?? ""} />
+                  <input type="hidden" name="itemId" value={item.id} />
+                  <SubmitButton pendingLabel="Removing item..." variant="ghost">
+                    Delete item
+                  </SubmitButton>
+                </form>
               </div>
             ))
           ) : (
