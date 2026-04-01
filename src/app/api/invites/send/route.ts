@@ -7,6 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const bodySchema = z.object({
   eventId: z.string().uuid(),
+  sendMode: z.enum(["pending_only", "all"]).default("pending_only"),
 });
 
 type GuestInviteRecord = {
@@ -14,6 +15,7 @@ type GuestInviteRecord = {
   name: string;
   email: string | null;
   rsvp_token: string;
+  last_contacted_at: string | null;
 };
 
 function buildBaseUrl(originHeader: string | null) {
@@ -69,7 +71,7 @@ export async function POST(request: Request) {
       .maybeSingle<{ id: string; invite_copy: string | null; public_slug: string; is_public: boolean }>(),
     supabase
       .from("guests")
-      .select("id, name, email, rsvp_token")
+      .select("id, name, email, rsvp_token, last_contacted_at")
       .eq("event_id", eventId)
       .returns<GuestInviteRecord[]>(),
   ]);
@@ -94,6 +96,10 @@ export async function POST(request: Request) {
   }
 
   const emailableGuests = guests.filter((guest) => Boolean(guest.email));
+  const sendableGuests =
+    parsed.data.sendMode === "all"
+      ? emailableGuests
+      : emailableGuests.filter((guest) => !guest.last_contacted_at);
 
   if (!emailableGuests.length) {
     return NextResponse.json(
@@ -105,13 +111,26 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!sendableGuests.length) {
+    return NextResponse.json(
+      {
+        ok: false,
+        message:
+          parsed.data.sendMode === "all"
+            ? "There are no emailable guests for this event."
+            : "All emailable guests have already been contacted. Use resend all to send again.",
+      },
+      { status: 400 },
+    );
+  }
+
   const headerStore = await headers();
   const baseUrl = buildBaseUrl(headerStore.get("origin"));
   const from = getInviteFromEmail();
   const inviteCopy = invite.invite_copy ?? `You're invited to ${event.title}.`;
 
   const sendResults = await Promise.all(
-    emailableGuests.map(async (guest) => {
+    sendableGuests.map(async (guest) => {
       const rsvpUrl = `${baseUrl}/rsvp/${invite.public_slug}?guest=${encodeURIComponent(guest.rsvp_token)}`;
       const subject = buildInviteEmailSubject({ eventTitle: event.title });
       const html = buildInviteEmailHtml({
@@ -169,6 +188,7 @@ export async function POST(request: Request) {
         metadata: {
           resend_id: result.resendId,
           rsvp_url: result.rsvpUrl,
+          send_mode: parsed.data.sendMode,
         },
       })),
     ),
@@ -187,8 +207,9 @@ export async function POST(request: Request) {
     ok: true,
     summary: {
       sentCount: successfulSends.length,
-      skippedCount: guests.length - emailableGuests.length,
+      skippedCount: guests.length - sendableGuests.length,
       failedCount: failedSends.length,
+      sendMode: parsed.data.sendMode,
     },
   });
 }
