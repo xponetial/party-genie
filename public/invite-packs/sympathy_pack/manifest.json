@@ -1,0 +1,57 @@
+{
+  "version": "1.0",
+  "holiday": "Sympathy",
+  "templates": [
+    {
+      "template_id": "sympathy_premium_01",
+      "category": "Sympathy",
+      "style": "soft_floral",
+      "asset": "assets/sympathy_premium_01.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "sympathy_premium_02",
+      "category": "Sympathy",
+      "style": "peaceful_ocean",
+      "asset": "assets/sympathy_premium_02.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "sympathy_premium_03",
+      "category": "Sympathy",
+      "style": "minimal_candle",
+      "asset": "assets/sympathy_premium_03.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    }
+  ]
+}

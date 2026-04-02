@@ -1,0 +1,57 @@
+{
+  "version": "1.0",
+  "holiday": "Graduation",
+  "templates": [
+    {
+      "template_id": "graduation_premium_01",
+      "category": "Graduation",
+      "style": "classic_elegant",
+      "asset": "assets/graduation_premium_01.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "graduation_premium_02",
+      "category": "Graduation",
+      "style": "celebration_party",
+      "asset": "assets/graduation_premium_02.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "graduation_premium_03",
+      "category": "Graduation",
+      "style": "minimal_modern",
+      "asset": "assets/graduation_premium_03.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    }
+  ]
+}

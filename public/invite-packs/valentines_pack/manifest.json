@@ -1,0 +1,60 @@
+{
+  "version": "1.0",
+  "holiday": "Valentine's Day",
+  "templates": [
+    {
+      "template_id": "valentines_premium_01",
+      "category": "Valentine's Day",
+      "style": "luxury_romantic",
+      "asset": "assets/valentines_premium_01.png",
+      "orientation": "vertical",
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      },
+      "overlay_recommendations": {
+        "text_color": [
+          "white",
+          "gold"
+        ]
+      }
+    },
+    {
+      "template_id": "valentines_premium_02",
+      "category": "Valentine's Day",
+      "style": "modern_neon",
+      "asset": "assets/valentines_premium_02.png",
+      "orientation": "vertical",
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      },
+      "overlay_recommendations": {
+        "text_color": [
+          "white",
+          "hot_pink"
+        ]
+      }
+    },
+    {
+      "template_id": "valentines_premium_03",
+      "category": "Valentine's Day",
+      "style": "soft_elegant",
+      "asset": "assets/valentines_premium_03.png",
+      "orientation": "vertical",
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      },
+      "overlay_recommendations": {
+        "text_color": [
+          "rose",
+          "taupe"
+        ]
+      }
+    }
+  ]
+}

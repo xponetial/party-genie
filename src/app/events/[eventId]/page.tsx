@@ -14,6 +14,8 @@ export default async function EventPage({
     <AppShell
       title={event.title}
       description={`A visual-first plan for ${event.event_type}, including invite preview, shopping, menu ideas, and checklist progress.`}
+      backHref="/dashboard"
+      backLabel="Back to dashboard"
     >
       <EventWorkspaceOverview
         eventId={eventId}

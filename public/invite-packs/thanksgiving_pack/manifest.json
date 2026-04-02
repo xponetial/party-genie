@@ -1,0 +1,57 @@
+{
+  "version": "1.0",
+  "holiday": "Thanksgiving",
+  "templates": [
+    {
+      "template_id": "thanksgiving_premium_01",
+      "category": "Thanksgiving",
+      "style": "luxury_dinner",
+      "asset": "assets/thanksgiving_premium_01.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "thanksgiving_premium_02",
+      "category": "Thanksgiving",
+      "style": "rustic_harvest",
+      "asset": "assets/thanksgiving_premium_02.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "thanksgiving_premium_03",
+      "category": "Thanksgiving",
+      "style": "minimal_modern",
+      "asset": "assets/thanksgiving_premium_03.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    }
+  ]
+}

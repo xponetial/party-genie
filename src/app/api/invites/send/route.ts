@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { buildInviteEmailHtml, buildInviteEmailSubject } from "@/lib/email/invite-template";
+import { normalizeInviteDesignData, type InviteDesignData } from "@/lib/invite-design";
 import { getInviteFromEmail, getResendClient } from "@/lib/email/resend";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -20,6 +21,30 @@ type GuestInviteRecord = {
 
 function buildBaseUrl(originHeader: string | null) {
   return process.env.NEXT_PUBLIC_SITE_URL?.trim() || originHeader || "http://localhost:3000";
+}
+
+async function fetchInlineCardAttachment(cardImageUrl: string) {
+  try {
+    const response = await fetch(cardImageUrl, {
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const contentType = response.headers.get("content-type") || "image/png";
+
+    return {
+      filename: "invite-card.png",
+      content: Buffer.from(arrayBuffer).toString("base64"),
+      contentType,
+      contentId: "invite-card",
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(request: Request) {
@@ -66,9 +91,15 @@ export async function POST(request: Request) {
       .single<{ id: string; title: string; event_type: string; event_date: string | null; location: string | null }>(),
     supabase
       .from("invites")
-      .select("id, invite_copy, public_slug, is_public")
+      .select("id, design_json, invite_copy, public_slug, is_public")
       .eq("event_id", eventId)
-      .maybeSingle<{ id: string; invite_copy: string | null; public_slug: string; is_public: boolean }>(),
+      .maybeSingle<{
+        id: string;
+        design_json: InviteDesignData | null;
+        invite_copy: string | null;
+        public_slug: string;
+        is_public: boolean;
+      }>(),
     supabase
       .from("guests")
       .select("id, name, email, rsvp_token, last_contacted_at")
@@ -127,18 +158,43 @@ export async function POST(request: Request) {
   const headerStore = await headers();
   const baseUrl = buildBaseUrl(headerStore.get("origin"));
   const from = getInviteFromEmail();
-  const inviteCopy = invite.invite_copy ?? `You're invited to ${event.title}.`;
+  const fallbackDesign: InviteDesignData = {
+    templateId: "email-fallback-template",
+    packSlug: "email-fallback-pack",
+    categoryKey: event.event_type.trim().toLowerCase(),
+    categoryLabel: event.event_type,
+    fields: {
+      title: event.title,
+      subtitle: event.event_type,
+      dateText: event.event_date
+        ? new Intl.DateTimeFormat("en-US", {
+            dateStyle: "full",
+            timeStyle: "short",
+          }).format(new Date(event.event_date))
+        : "Date coming soon",
+      locationText: event.location ?? "Location coming soon",
+      messageText: invite.invite_copy ?? `You're invited to ${event.title}.`,
+      ctaText: "RSVP with your private link",
+    },
+  };
+  const inviteDesign = invite.design_json
+    ? normalizeInviteDesignData(invite.design_json, fallbackDesign)
+    : fallbackDesign;
+  const inviteCopy = inviteDesign.fields.messageText;
+  const cardImageUrl = `${baseUrl}/api/invites/card-image/${invite.public_slug}`;
+  const inlineCardAttachment = await fetchInlineCardAttachment(cardImageUrl);
 
   const sendResults = await Promise.all(
     sendableGuests.map(async (guest) => {
       const rsvpUrl = `${baseUrl}/rsvp/${invite.public_slug}?guest=${encodeURIComponent(guest.rsvp_token)}`;
       const subject = buildInviteEmailSubject({ eventTitle: event.title });
       const html = buildInviteEmailHtml({
-        eventTitle: event.title,
-        eventType: event.event_type,
-        eventDate: event.event_date,
-        location: event.location,
+        eventTitle: inviteDesign.fields.title,
+        subtitle: inviteDesign.fields.subtitle,
+        dateText: inviteDesign.fields.dateText,
+        locationText: inviteDesign.fields.locationText,
         inviteCopy,
+        cardImageSrc: inlineCardAttachment ? "cid:invite-card" : cardImageUrl,
         guestName: guest.name,
         rsvpUrl,
       });
@@ -148,6 +204,7 @@ export async function POST(request: Request) {
         to: guest.email!,
         subject,
         html,
+        attachments: inlineCardAttachment ? [inlineCardAttachment] : undefined,
       });
 
       return {

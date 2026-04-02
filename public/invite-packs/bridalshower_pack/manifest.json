@@ -1,0 +1,57 @@
+{
+  "version": "1.0",
+  "holiday": "Bridal Shower",
+  "templates": [
+    {
+      "template_id": "bridalshower_premium_01",
+      "category": "Bridal Shower",
+      "style": "floral_garden",
+      "asset": "assets/bridalshower_premium_01.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "bridalshower_premium_02",
+      "category": "Bridal Shower",
+      "style": "champagne_celebration",
+      "asset": "assets/bridalshower_premium_02.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "bridalshower_premium_03",
+      "category": "Bridal Shower",
+      "style": "minimal_chic",
+      "asset": "assets/bridalshower_premium_03.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    }
+  ]
+}

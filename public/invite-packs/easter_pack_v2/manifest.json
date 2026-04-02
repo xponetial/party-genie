@@ -1,0 +1,57 @@
+{
+  "version": "1.0",
+  "holiday": "Easter",
+  "templates": [
+    {
+      "template_id": "easter_premium_01",
+      "category": "Easter",
+      "style": "garden",
+      "asset": "assets/easter_premium_01.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "easter_premium_02",
+      "category": "Easter",
+      "style": "pastel_playful",
+      "asset": "assets/easter_premium_02.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "easter_premium_03",
+      "category": "Easter",
+      "style": "minimal_floral",
+      "asset": "assets/easter_premium_03.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    }
+  ]
+}

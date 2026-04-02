@@ -1,0 +1,57 @@
+{
+  "version": "1.0",
+  "holiday": "St. Patrick's Day",
+  "templates": [
+    {
+      "template_id": "stpatricks_premium_01",
+      "category": "St. Patrick's Day",
+      "style": "green_beer_night",
+      "asset": "assets/stpatricks_premium_01.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "stpatricks_premium_02",
+      "category": "St. Patrick's Day",
+      "style": "festive_party",
+      "asset": "assets/stpatricks_premium_02.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "stpatricks_premium_03",
+      "category": "St. Patrick's Day",
+      "style": "minimal_clean",
+      "asset": "assets/stpatricks_premium_03.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    }
+  ]
+}

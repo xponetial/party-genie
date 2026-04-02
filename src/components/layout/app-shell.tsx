@@ -7,6 +7,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { LogoutButton } from "@/components/auth/logout-button";
+import { Button } from "@/components/ui/button";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -77,13 +78,12 @@ export async function AppShell({
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
               {backHref ? (
-                <Link
-                  href={backHref}
-                  className="inline-flex items-center gap-2 rounded-full border border-border bg-white/70 px-3 py-1.5 text-xs font-medium uppercase tracking-[0.18em] text-ink-muted transition hover:border-brand/40 hover:text-ink"
-                >
-                  <ArrowLeft className="size-3.5" />
-                  {backLabel}
-                </Link>
+                <Button asChild className="gap-2 text-xs uppercase tracking-[0.18em]">
+                  <Link href={backHref}>
+                    <ArrowLeft className="size-3.5" />
+                    {backLabel}
+                  </Link>
+                </Button>
               ) : null}
               <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">PartyGenie MVP</p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink">{title}</h1>

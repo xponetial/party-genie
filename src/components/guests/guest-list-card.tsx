@@ -1,5 +1,8 @@
+import Link from "next/link";
 import { addGuestAction, deleteGuestAction, updateGuestAction } from "@/app/events/actions";
-import { type GuestDetails, type InviteDetails } from "@/lib/events";
+import { InviteSendButton } from "@/components/invite/invite-send-button";
+import { type GuestDetails, type GuestMessageDetails, type InviteDetails } from "@/lib/events";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,16 +12,20 @@ export function GuestListCard({
   eventId,
   guests,
   invite,
+  guestMessages,
 }: {
   eventId: string;
   guests: GuestDetails[];
   invite: InviteDetails | null;
+  guestMessages: GuestMessageDetails[];
 }) {
   const confirmedSeats = guests
     .filter((guest) => guest.status === "confirmed")
     .reduce((sum, guest) => sum + 1 + guest.plus_one_count, 0);
   const respondedCount = guests.filter((guest) => guest.status !== "pending").length;
   const rsvpRate = guests.length ? Math.round((respondedCount / guests.length) * 100) : 0;
+  const acceptedCount = guests.filter((guest) => guest.status === "confirmed").length;
+  const pendingCount = guests.filter((guest) => guest.status === "pending").length;
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
@@ -147,7 +154,24 @@ export function GuestListCard({
       </Card>
 
       <Card className="bg-[#fffaf2]">
-        <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Guest analytics</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Guest activity</p>
+        <h3 className="mt-3 text-xl font-semibold text-ink">RSVP tracking and delivery state</h3>
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-3xl bg-white/85 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Accepted</p>
+            <p className="mt-2 text-2xl font-semibold text-ink">{acceptedCount}</p>
+          </div>
+          <div className="rounded-3xl bg-white/85 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Pending</p>
+            <p className="mt-2 text-2xl font-semibold text-ink">{pendingCount}</p>
+          </div>
+          <div className="rounded-3xl bg-white/85 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Sent state</p>
+            <p className="mt-2 text-sm font-semibold text-ink">
+              {invite?.sent_at ? new Date(invite.sent_at).toLocaleString("en-US") : "Not sent yet"}
+            </p>
+          </div>
+        </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-3xl bg-white/85 p-4">
             <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">RSVP rate</p>
@@ -163,6 +187,31 @@ export function GuestListCard({
           </div>
         </div>
         <div className="mt-5 space-y-3">
+          {guests.length ? (
+            guests.slice(0, 3).map((guest) => (
+              <div
+                key={guest.id}
+                className="flex items-center justify-between rounded-3xl border border-border bg-white/85 px-4 py-3"
+              >
+                <div>
+                  <p className="font-medium text-ink">{guest.name}</p>
+                  <p className="text-sm text-ink-muted">
+                    {guest.email ?? guest.phone ?? "No contact yet"}
+                  </p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">
+                    {guest.last_contacted_at
+                      ? `Last contacted ${new Date(guest.last_contacted_at).toLocaleString("en-US")}`
+                      : "No delivery logged yet"}
+                  </p>
+                </div>
+                <span className="text-sm font-medium capitalize text-brand">{guest.status}</span>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-3xl border border-border bg-white/85 p-4 text-sm text-ink-muted">
+              Add guests before sending the invite.
+            </div>
+          )}
           {[
             "Guests added here are immediately visible on the event overview and invite screen.",
             "RLS still restricts all rows to the signed-in event owner.",
@@ -172,6 +221,52 @@ export function GuestListCard({
               {item}
             </div>
           ))}
+        </div>
+        {invite ? (
+          <div className="mt-5">
+            <InviteSendButton eventId={eventId} />
+          </div>
+        ) : null}
+        <div className="mt-6">
+          <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Recent delivery log</p>
+          <div className="mt-3 space-y-3">
+            {guestMessages.length ? (
+              guestMessages.map((message) => (
+                <div key={message.id} className="rounded-3xl border border-border bg-white/85 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-ink">{message.guest?.name ?? "Guest"}</p>
+                      <p className="mt-1 text-sm text-ink-muted">
+                        {message.guest?.email ?? "No email saved"}
+                      </p>
+                    </div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">
+                      {message.sent_at ? new Date(message.sent_at).toLocaleString("en-US") : "Draft"}
+                    </p>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-ink-muted">
+                    {message.subject ?? "Invite email sent"}
+                  </p>
+                  {message.metadata?.rsvp_url ? (
+                    <p className="mt-2 break-all text-xs text-brand">{message.metadata.rsvp_url}</p>
+                  ) : null}
+                </div>
+              ))
+            ) : (
+              <div className="rounded-3xl border border-border bg-white/85 p-4 text-sm text-ink-muted">
+                No invite deliveries have been logged yet.
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="mt-6 rounded-3xl border border-border bg-white/85 p-4">
+          <p className="text-sm leading-6 text-ink-muted">
+            Need to fine-tune the visual invite first? You can jump back to the invitation
+            generator any time before sending.
+          </p>
+          <Button asChild className="mt-3">
+            <Link href={`/events/${eventId}/invite`}>Back to invitation generator</Link>
+          </Button>
         </div>
       </Card>
     </div>

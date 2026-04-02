@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { notFound } from "next/navigation";
+import type { InviteDesignData } from "@/lib/invite-design";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type EventDetails = {
@@ -16,6 +17,7 @@ export type EventDetails = {
 
 export type InviteDetails = {
   id: string;
+  design_json: InviteDesignData | null;
   invite_copy: string | null;
   public_slug: string;
   is_public: boolean;
@@ -135,7 +137,7 @@ export const getEventContext = cache(async (eventId: string) => {
   ] = await Promise.all([
     supabase
       .from("invites")
-      .select("id, invite_copy, public_slug, is_public, sent_at")
+      .select("id, design_json, invite_copy, public_slug, is_public, sent_at")
       .eq("event_id", eventId)
       .maybeSingle<InviteDetails>(),
     supabase

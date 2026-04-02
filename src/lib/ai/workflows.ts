@@ -11,6 +11,7 @@ import {
   getOpenAIModel,
   getPromptVersion,
 } from "@/lib/ai/party-genie";
+import { normalizeInviteDesignData, type InviteDesignData } from "@/lib/invite-design";
 
 type EventRecord = {
   id: string;
@@ -62,6 +63,11 @@ type PlanVersionRecord = {
   change_reason?: string | null;
   created_at?: string;
   version_num: number;
+};
+
+type InviteRecord = {
+  id: string;
+  design_json: InviteDesignData | null;
 };
 
 const storedPlanSnapshotSchema = z.object({
@@ -309,6 +315,16 @@ async function ensureInvite(supabase: SupabaseClient, eventId: string, inviteCop
   }
 
   return createdInvite.id;
+}
+
+async function loadInviteRecord(supabase: SupabaseClient, eventId: string) {
+  const { data } = await supabase
+    .from("invites")
+    .select("id, design_json")
+    .eq("event_id", eventId)
+    .maybeSingle<InviteRecord>();
+
+  return data ?? null;
 }
 
 async function ensureShoppingList(supabase: SupabaseClient, eventId: string) {
@@ -955,14 +971,58 @@ export async function generateInviteCopyForEvent(
   eventId: string,
 ) {
   const event = await loadEventSeed(supabase, eventId);
-  const generated = await generateInviteCopy(event);
+  const inviteRecord = await loadInviteRecord(supabase, eventId);
+  const fallbackDesign: InviteDesignData = {
+    templateId: "fallback-template",
+    packSlug: "fallback-pack",
+    categoryKey: event.event_type.trim().toLowerCase(),
+    categoryLabel: event.event_type,
+    fields: {
+      title: event.title,
+      subtitle: getThemeFromEvent(event),
+      dateText: event.event_date
+        ? new Intl.DateTimeFormat("en-US", {
+            dateStyle: "full",
+            timeStyle: "short",
+          }).format(new Date(event.event_date))
+        : "Date coming soon",
+      locationText: event.location?.trim() || "Location coming soon",
+      messageText: "",
+      ctaText: "RSVP with your private link",
+    },
+  };
+  const inviteDesign = inviteRecord?.design_json
+    ? normalizeInviteDesignData(inviteRecord.design_json, fallbackDesign)
+    : fallbackDesign;
+  const generated = await generateInviteCopy(event, {
+    title: inviteDesign.fields.title,
+    subtitle: inviteDesign.fields.subtitle,
+    dateText: inviteDesign.fields.dateText,
+    locationText: inviteDesign.fields.locationText,
+    currentMessage: inviteDesign.fields.messageText,
+  });
   const inviteCopy = generated.inviteCopy;
   const fingerprintInput = buildEventFingerprint(event, "invitation_text");
   const requestFingerprint = buildFingerprint(fingerprintInput);
   const promptVersion = generated.rawResponse.promptVersion ?? getPromptVersion("invitation_text");
   const model = generated.rawResponse.model ?? getOpenAIModel("lightweight");
 
-  await ensureInvite(supabase, eventId, inviteCopy);
+  const inviteId = await ensureInvite(supabase, eventId, inviteCopy);
+
+  if (inviteRecord?.design_json) {
+    await supabase
+      .from("invites")
+      .update({
+        design_json: {
+          ...inviteDesign,
+          fields: {
+            ...inviteDesign.fields,
+            messageText: inviteCopy,
+          },
+        },
+      })
+      .eq("id", inviteId);
+  }
 
   await supabase
     .from("party_plans")

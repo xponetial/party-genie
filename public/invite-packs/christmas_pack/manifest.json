@@ -1,0 +1,57 @@
+{
+  "version": "1.0",
+  "holiday": "Christmas",
+  "templates": [
+    {
+      "template_id": "christmas_premium_01",
+      "category": "Christmas",
+      "style": "luxury_tree",
+      "asset": "assets/christmas_premium_01.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "christmas_premium_02",
+      "category": "Christmas",
+      "style": "cozy_fireplace",
+      "asset": "assets/christmas_premium_02.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "christmas_premium_03",
+      "category": "Christmas",
+      "style": "minimal_modern",
+      "asset": "assets/christmas_premium_03.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    }
+  ]
+}

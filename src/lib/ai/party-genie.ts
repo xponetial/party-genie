@@ -70,6 +70,14 @@ export type AiUsageMetadata = {
   usedFallback: boolean;
 };
 
+type InviteContext = {
+  title?: string | null;
+  subtitle?: string | null;
+  dateText?: string | null;
+  locationText?: string | null;
+  currentMessage?: string | null;
+};
+
 const generatedTaskSchema = z.object({
   title: z.string().min(3),
   due_label: z.string().min(2),
@@ -457,11 +465,14 @@ export function buildPartyPlan(event: EventSeed): GeneratedPartyPlan {
   };
 }
 
-export function buildInviteCopy(event: EventSeed) {
+export function buildInviteCopy(event: EventSeed, context?: InviteContext) {
   const theme = getTheme(event);
-  const eventMoment = getEventMoment(event);
+  const title = context?.title?.trim() || event.title;
+  const dateText = context?.dateText?.trim() || getEventMoment(event);
+  const locationText = context?.locationText?.trim() || event.location || "our celebration space";
+  const subtitle = context?.subtitle?.trim() || theme;
 
-  return `Join us for ${event.title} on ${eventMoment}. We're planning a ${theme.toLowerCase()} with a warm welcome, great food, and a relaxed flow from arrival to dessert. Please RSVP so we can finalize the setup.`;
+  return `Join us for ${title}. We would love to celebrate with you on ${dateText} at ${locationText} for a ${subtitle.toLowerCase()} filled with thoughtful details, great company, and an easy flow from arrival to dessert. Please RSVP so we can finish planning with you in mind.`;
 }
 
 export function buildShoppingList(event: EventSeed) {
@@ -593,16 +604,30 @@ export async function generatePartyPlan(event: EventSeed): Promise<GeneratedPart
   };
 }
 
-export async function generateInviteCopy(event: EventSeed) {
-  const fallback = buildInviteCopy(event);
+export async function generateInviteCopy(event: EventSeed, context?: InviteContext) {
+  const fallback = buildInviteCopy(event, context);
+  const title = context?.title?.trim() || event.title;
+  const dateText = context?.dateText?.trim() || getEventMoment(event);
+  const locationText = context?.locationText?.trim() || event.location || "TBD";
+  const subtitle = context?.subtitle?.trim() || getTheme(event);
+  const currentMessage = context?.currentMessage?.trim();
   const generated = await generateStructuredObject({
     generationType: "invitation_text",
     taskType: "lightweight",
     systemPrompt:
-      "You write polished invitation copy for event hosts. Keep the tone warm, specific, and ready to send.",
-    userPrompt: `Write invitation copy for this event brief.\n${eventBrief(event)}\n\nRequirements:
-- Keep it to one short paragraph.
-- Mention the event title, timing, tone, and RSVP request.
+      "You write polished invitation copy for event hosts. Keep the tone warm, specific, guest-facing, and ready to send. The copy should sound like a finished invitation message, not planning notes.",
+    userPrompt: `Write invitation copy for this event brief.\n${eventBrief(event)}\n\nCurrent invitation field values:
+- Card title: ${title}
+- Card subtitle/vibe: ${subtitle}
+- Date and time field: ${dateText}
+- Location field: ${locationText}
+${currentMessage ? `- Current guest message: ${currentMessage}` : ""}
+\nRequirements:
+- Keep it to one polished paragraph of 2 to 4 sentences.
+- Naturally mention the event title, date or timing, and location when available.
+- Make it feel welcoming and specific to the occasion, not generic.
+- Include a light RSVP call to action.
+- Use the provided date/time and location field values directly when they are available.
 - Return JSON with an inviteCopy field only.`,
     schema: generatedInviteCopySchema,
   }).catch(() => null);

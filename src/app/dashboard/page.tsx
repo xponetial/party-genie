@@ -3,17 +3,21 @@ import {
   CalendarDays,
   CheckCircle2,
   Mail,
+  PencilLine,
   ShoppingCart,
   Sparkles,
+  Trash2,
   Users,
 } from "lucide-react";
+import { deleteEventAction } from "@/app/events/actions";
 import { DashboardMetricCard } from "@/components/dashboard/dashboard-metric-card";
 import { DashboardPanel } from "@/components/dashboard/dashboard-panel";
 import { AppShell } from "@/components/layout/app-shell";
-import { getAiUsageForUser } from "@/lib/ai/usage";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
+import { getAiUsageForUser } from "@/lib/ai/usage";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type DashboardEvent = {
   id: string;
@@ -78,7 +82,7 @@ function truncate(value: string | null, maxLength: number) {
     return value;
   }
 
-  return `${value.slice(0, maxLength - 1)}…`;
+  return `${value.slice(0, maxLength - 3)}...`;
 }
 
 function formatCost(value: number) {
@@ -239,42 +243,64 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <DashboardPanel
-          title="Latest event"
-          description="Pulled from the `events` table using the Supabase server client."
+          title="Recent events"
+          description="Open, manage, or remove any of your latest event workspaces."
         >
           {latestEvent ? (
-            <div className="rounded-3xl border border-border bg-white/75 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xl font-semibold">{latestEvent.title}</p>
-                  <p className="mt-1 text-sm text-ink-muted">
-                    {formatEventDate(latestEvent.event_date)}
-                    {latestEvent.location ? ` in ${latestEvent.location}` : ""}
-                  </p>
-                </div>
-                <Badge variant="success">{latestEvent.status}</Badge>
-              </div>
+            <div className="space-y-3">
+              {safeEvents.map((event) => (
+                <div key={event.id} className="rounded-3xl border border-border bg-white/75 p-5">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <p className="text-xl font-semibold text-ink">{event.title}</p>
+                        <Badge variant="success">{event.status}</Badge>
+                      </div>
+                      <p className="mt-2 text-sm text-ink-muted">
+                        {formatEventDate(event.event_date)}
+                        {event.location ? ` in ${event.location}` : ""}
+                      </p>
+                    </div>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl bg-canvas px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Type</p>
-                  <p className="mt-2 font-semibold">{latestEvent.event_type}</p>
-                </div>
-                <div className="rounded-2xl bg-canvas px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Guest target</p>
-                  <p className="mt-2 font-semibold">{latestEvent.guest_target ?? "Not set"}</p>
-                </div>
-                <div className="rounded-2xl bg-canvas px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Budget</p>
-                  <p className="mt-2 font-semibold">{formatMoney(latestEvent.budget)}</p>
-                </div>
-              </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button asChild variant="secondary">
+                        <Link href={`/events/${event.id}`}>
+                          <CalendarDays className="size-4" />
+                          Open
+                        </Link>
+                      </Button>
+                      <Button asChild variant="ghost">
+                        <Link href={`/events/${event.id}/settings`}>
+                          <PencilLine className="size-4" />
+                          Edit
+                        </Link>
+                      </Button>
+                      <form action={deleteEventAction}>
+                        <input name="eventId" type="hidden" value={event.id} />
+                        <SubmitButton pendingLabel="Deleting..." variant="ghost">
+                          <Trash2 className="size-4" />
+                          Delete
+                        </SubmitButton>
+                      </form>
+                    </div>
+                  </div>
 
-              <div className="mt-4">
-                <Button asChild>
-                  <Link href={`/events/${latestEvent.id}`}>Open event</Link>
-                </Button>
-              </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl bg-canvas px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Type</p>
+                      <p className="mt-2 font-semibold text-ink">{event.event_type}</p>
+                    </div>
+                    <div className="rounded-2xl bg-canvas px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Guest target</p>
+                      <p className="mt-2 font-semibold text-ink">{event.guest_target ?? "Not set"}</p>
+                    </div>
+                    <div className="rounded-2xl bg-canvas px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Budget</p>
+                      <p className="mt-2 font-semibold text-ink">{formatMoney(event.budget)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="rounded-3xl border border-border bg-white/75 p-5">
@@ -439,7 +465,7 @@ export default async function DashboardPage() {
                       {generation.generationType.replaceAll("_", " ")}
                     </p>
                     <p className="mt-1 text-sm text-ink-muted">
-                      {generation.model} · {generation.status}
+                      {generation.model} | {generation.status}
                     </p>
                   </div>
                   <div className="text-right">

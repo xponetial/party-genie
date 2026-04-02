@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { restorePlanVersionForEvent } from "@/lib/ai/workflows";
+import { inviteDesignSchema } from "@/lib/invite-design";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const blankToNullNumber = z.preprocess((value) => {
@@ -28,6 +29,7 @@ const eventSchema = z.object({
   guestTarget: blankToNullNumber.transform((value) => (value == null ? null : Math.trunc(value))).optional(),
   budget: blankToNullNumber.optional(),
   theme: z.string().trim().optional(),
+  designJson: z.string().optional(),
 });
 
 const guestSchema = z.object({
@@ -48,11 +50,16 @@ const deleteGuestSchema = z.object({
   guestId: z.string().uuid(),
 });
 
+const deleteEventSchema = z.object({
+  eventId: z.string().uuid(),
+});
+
 const inviteSchema = z.object({
   eventId: z.string().uuid(),
   inviteId: z.string().uuid(),
   inviteCopy: z.string().trim().min(10),
   isPublic: z.enum(["true", "false"]).default("false"),
+  designJson: z.string().optional(),
 });
 
 const shoppingItemSchema = z.object({
@@ -164,6 +171,7 @@ export async function createEventAction(formData: FormData) {
     guestTarget: formData.get("guestTarget"),
     budget: formData.get("budget"),
     theme: formData.get("theme") || undefined,
+    designJson: formData.get("designJson")?.toString(),
   });
 
   if (!parsed.success) {
@@ -172,7 +180,19 @@ export async function createEventAction(formData: FormData) {
 
   const eventDate = parseDateTime(parsed.data.eventDate, parsed.data.eventTime);
   const theme = parsed.data.theme?.trim() || `${parsed.data.eventType} celebration`;
-  const inviteCopy = `You're invited to ${parsed.data.title}. Join us for a ${theme.toLowerCase()} with food, fun, and great company.`;
+  let parsedDesign: ReturnType<typeof inviteDesignSchema.safeParse> | null = null;
+
+  if (parsed.data.designJson) {
+    try {
+      parsedDesign = inviteDesignSchema.safeParse(JSON.parse(parsed.data.designJson));
+    } catch {
+      parsedDesign = null;
+    }
+  }
+  const designJson = parsedDesign?.success ? parsedDesign.data : null;
+  const inviteCopy =
+    designJson?.fields.messageText ||
+    `You're invited to ${parsed.data.title}. Join us for a ${theme.toLowerCase()} with food, fun, and great company.`;
 
   const { data: event, error } = await supabase
     .from("events")
@@ -209,6 +229,7 @@ export async function createEventAction(formData: FormData) {
   await Promise.all([
     supabase.from("invites").insert({
       event_id: event.id,
+      design_json: designJson,
       invite_copy: inviteCopy,
       is_public: false,
     }),
@@ -245,14 +266,26 @@ export async function saveInviteAction(formData: FormData) {
     inviteId: formData.get("inviteId"),
     inviteCopy: formData.get("inviteCopy"),
     isPublic: formData.get("isPublic") ?? "false",
+    designJson: formData.get("designJson")?.toString(),
   });
 
   if (!parsed.success) return;
+
+  let designJson: unknown = null;
+
+  if (parsed.data.designJson) {
+    try {
+      designJson = JSON.parse(parsed.data.designJson);
+    } catch {
+      designJson = null;
+    }
+  }
 
   await Promise.all([
     supabase
       .from("invites")
       .update({
+        design_json: designJson,
         invite_copy: parsed.data.inviteCopy,
         is_public: parsed.data.isPublic === "true",
       })
@@ -267,6 +300,23 @@ export async function saveInviteAction(formData: FormData) {
 
   revalidatePath(`/events/${parsed.data.eventId}`);
   revalidatePath(`/events/${parsed.data.eventId}/invite`);
+}
+
+export async function deleteEventAction(formData: FormData) {
+  const { supabase, user } = await requireUser();
+  const parsed = deleteEventSchema.safeParse({
+    eventId: formData.get("eventId"),
+  });
+
+  if (!parsed.success) return;
+
+  await supabase
+    .from("events")
+    .delete()
+    .eq("id", parsed.data.eventId)
+    .eq("owner_id", user.id);
+
+  revalidatePath("/dashboard");
 }
 
 export async function markInviteSentAction(formData: FormData) {

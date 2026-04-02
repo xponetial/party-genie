@@ -1,7 +1,11 @@
 import { notFound } from "next/navigation";
+import { InviteCardCanvas } from "@/components/invite/invite-card-canvas";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { ShellFrame } from "@/components/layout/shell-frame";
+import type { InviteDesignData } from "@/lib/invite-design";
+import { getInviteTemplateCatalog } from "@/lib/invite-template-catalog";
+import { findInviteTemplate } from "@/lib/invite-template-types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { PublicRsvpForm } from "@/components/rsvp/public-rsvp-form";
 
@@ -13,6 +17,7 @@ type PublicInviteRecord = {
   location: string | null;
   theme: string | null;
   invite_copy: string | null;
+  design_json: InviteDesignData | null;
   public_slug: string;
 };
 
@@ -26,6 +31,7 @@ export default async function PublicRsvpPage({
   const { slug } = await params;
   const { guest: guestToken, success, status: savedStatus, plusOnes } = await searchParams;
   const supabase = await createSupabaseServerClient();
+  const templateCategories = await getInviteTemplateCatalog();
 
   const { data: inviteRows, error: inviteError } = await supabase.rpc("get_public_invite_by_slug", {
     p_slug: slug,
@@ -73,6 +79,12 @@ export default async function PublicRsvpPage({
         : savedStatus === "pending"
           ? "You can come back to this same link and finalize later."
           : null;
+  const publicTemplate = invite.design_json
+    ? findInviteTemplate(templateCategories, {
+        templateId: invite.design_json.templateId,
+        packSlug: invite.design_json.packSlug,
+      })
+    : null;
 
   return (
     <ShellFrame
@@ -83,6 +95,16 @@ export default async function PublicRsvpPage({
       <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <Card className="bg-white/85">
           <Badge>{invite.event_type}</Badge>
+          {publicTemplate && invite.design_json ? (
+            <div className="mt-6">
+              <InviteCardCanvas
+                alt={`${invite.title} invitation`}
+                design={invite.design_json}
+                maxWidth={420}
+                template={publicTemplate}
+              />
+            </div>
+          ) : null}
           <h2 className="mt-6 text-4xl font-semibold tracking-tight text-ink">
             {invite.theme ?? invite.title}
           </h2>

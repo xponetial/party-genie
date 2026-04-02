@@ -1,0 +1,57 @@
+{
+  "version": "1.0",
+  "holiday": "Father's Day",
+  "templates": [
+    {
+      "template_id": "fathersday_premium_01",
+      "category": "Father's Day",
+      "style": "classic_gift",
+      "asset": "assets/fathersday_premium_01.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "fathersday_premium_02",
+      "category": "Father's Day",
+      "style": "bbq_outdoor",
+      "asset": "assets/fathersday_premium_02.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    },
+    {
+      "template_id": "fathersday_premium_03",
+      "category": "Father's Day",
+      "style": "tools_minimal",
+      "asset": "assets/fathersday_premium_03.png",
+      "orientation": "vertical",
+      "image_spec": {
+        "width": 1024,
+        "height": 1536,
+        "aspect_ratio": "2:3"
+      },
+      "text_safe_areas": {
+        "title": "upper_center",
+        "details": "middle_center",
+        "cta": "lower_center"
+      }
+    }
+  ]
+}

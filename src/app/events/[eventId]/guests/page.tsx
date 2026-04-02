@@ -8,7 +8,7 @@ export default async function EventGuestsPage({
   params: Promise<{ eventId: string }>;
 }) {
   const { eventId } = await params;
-  const { guests, invite } = await getEventContext(eventId);
+  const { guests, invite, guestMessages } = await getEventContext(eventId);
 
   return (
     <AppShell
@@ -16,7 +16,7 @@ export default async function EventGuestsPage({
       description="Track guest status, add and import attendees, and keep RSVP communication organized."
       backHref={`/events/${eventId}`}
     >
-      <GuestListCard eventId={eventId} guests={guests} invite={invite} />
+      <GuestListCard eventId={eventId} guests={guests} invite={invite} guestMessages={guestMessages} />
     </AppShell>
   );
 }
