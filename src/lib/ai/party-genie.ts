@@ -94,6 +94,10 @@ type ShoppingReplacementContext = ShoppingGenerationContext & {
   existingCategoryNames?: string[] | null;
 };
 
+type ReplacementCandidate = Omit<GeneratedShoppingItem, "external_url"> & {
+  external_url?: string | null;
+};
+
 const generatedTaskSchema = z.object({
   title: z.string().min(3),
   due_label: z.string().min(2),
@@ -315,6 +319,317 @@ function dedupeShoppingItems(items: GeneratedShoppingItem[]) {
     seen.add(key);
     return true;
   });
+}
+
+function normalizeComparisonTokens(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(
+      (token) =>
+        token.length > 2 &&
+        ![
+          "pack",
+          "set",
+          "kit",
+          "party",
+          "bundle",
+          "host",
+          "event",
+          "extras",
+          "pieces",
+          "piece",
+        ].includes(token),
+    );
+}
+
+function isNameTooSimilar(candidateName: string, blockedNames: string[]) {
+  const candidateTokens = normalizeComparisonTokens(candidateName);
+
+  return blockedNames.some((blockedName) => {
+    const blockedTokens = normalizeComparisonTokens(blockedName);
+
+    if (!blockedTokens.length || !candidateTokens.length) {
+      return candidateName.trim().toLowerCase() === blockedName.trim().toLowerCase();
+    }
+
+    const sharedTokens = candidateTokens.filter((token) => blockedTokens.includes(token));
+    return sharedTokens.length >= Math.min(2, blockedTokens.length);
+  });
+}
+
+function buildReplacementAngles(category: string) {
+  const normalizedCategory = category.trim().toLowerCase();
+
+  if (normalizedCategory.includes("beverage") || normalizedCategory.includes("drink")) {
+    return [
+      "garnish and presentation",
+      "cooling and serving",
+      "self-serve station accessories",
+    ];
+  }
+
+  if (normalizedCategory.includes("decor")) {
+    return ["lighting and glow", "signage and welcome moment", "table styling accents"];
+  }
+
+  if (normalizedCategory.includes("table") || normalizedCategory.includes("serve")) {
+    return ["guest place settings", "serving flow", "cleanup and reset support"];
+  }
+
+  if (normalizedCategory.includes("food") || normalizedCategory.includes("dessert")) {
+    return ["display and presentation", "snack service", "dessert moment"];
+  }
+
+  if (normalizedCategory.includes("hosting")) {
+    return ["setup support", "hosting convenience", "guest comfort"];
+  }
+
+  if (normalizedCategory.includes("activity") || normalizedCategory.includes("favor")) {
+    return ["interactive fun", "take-home keepsake", "photo moment"];
+  }
+
+  return ["different shopping angle", "host convenience", "guest experience"];
+}
+
+function buildReplacementPool(
+  event: EventSeed,
+  currentItem: {
+    category: string;
+    name: string;
+    quantity: number;
+  },
+  context?: ShoppingReplacementContext,
+): ReplacementCandidate[] {
+  const theme = (context?.planTheme?.trim() || getTheme(event)).trim();
+  const category = currentItem.category.trim();
+  const normalizedCategory = category.toLowerCase();
+  const guestCount = getGuestCount(event);
+  const budgetTier = getBudgetTier(event);
+
+  if (normalizedCategory.includes("beverage") || normalizedCategory.includes("drink")) {
+    return [
+      {
+        category,
+        name: "Signature drink garnish and glass marker set",
+        quantity: Math.max(1, Math.ceil(guestCount / 12)),
+        estimated_price: budgetTier === "lean" ? 12 : 18,
+        recommendation_reason:
+          "Shifts the beverage setup toward presentation and guest convenience instead of repeating another dispenser-style add-on.",
+        search_query: `${theme} party drink garnish tray glass markers`,
+        image_url: null,
+      },
+      {
+        category,
+        name: "Ice bucket and insulated beverage tub station",
+        quantity: Math.max(1, Math.ceil(guestCount / 16)),
+        estimated_price: budgetTier === "lean" ? 16 : 24,
+        recommendation_reason:
+          "Covers the cooling side of the drink setup so guests can serve themselves without the host constantly refreshing the station.",
+        search_query: `${theme} party beverage tub ice bucket set`,
+        image_url: null,
+      },
+      {
+        category,
+        name: "Mocktail syrup and mixer sampler",
+        quantity: Math.max(1, Math.ceil(guestCount / 18)),
+        estimated_price: budgetTier === "lean" ? 14 : 22,
+        recommendation_reason:
+          "Adds variety at the bar area and gives the host a more guest-facing beverage upgrade than another accessory pack.",
+        search_query: `${theme} party mocktail mixer sampler`,
+        image_url: null,
+      },
+    ];
+  }
+
+  if (normalizedCategory.includes("decor")) {
+    return [
+      {
+        category,
+        name: "Ambient string light and lantern bundle",
+        quantity: Math.max(1, Math.ceil(guestCount / 16)),
+        estimated_price: budgetTier === "lean" ? 18 : 28,
+        recommendation_reason:
+          "Pushes the decor toward lighting and atmosphere so the space feels more finished than another tabletop-only accent.",
+        search_query: `${theme} party string lights lantern decor`,
+        image_url: null,
+      },
+      {
+        category,
+        name: "Welcome sign and entry styling kit",
+        quantity: 1,
+        estimated_price: budgetTier === "lean" ? 15 : 24,
+        recommendation_reason:
+          "Creates a stronger first impression for guests by improving the arrival moment instead of repeating interior decor pieces.",
+        search_query: `${theme} party welcome sign entry decor`,
+        image_url: null,
+      },
+      {
+        category,
+        name: "Centerpiece and tabletop styling mix",
+        quantity: Math.max(1, Math.ceil(guestCount / 10)),
+        estimated_price: budgetTier === "lean" ? 16 : 22,
+        recommendation_reason:
+          "Keeps the theme visible at eye level while giving you a different table styling direction from the current decor pick.",
+        search_query: `${theme} party centerpiece table accents`,
+        image_url: null,
+      },
+    ];
+  }
+
+  if (normalizedCategory.includes("table") || normalizedCategory.includes("serve")) {
+    return [
+      {
+        category,
+        name: "Disposable charger and serving tray combo",
+        quantity: Math.max(1, Math.ceil(guestCount / 14)),
+        estimated_price: budgetTier === "lean" ? 14 : 20,
+        recommendation_reason:
+          "Moves the tableware recommendation toward presentation and buffet flow instead of repeating cups or napkins.",
+        search_query: `${theme} party charger plates serving tray set`,
+        image_url: null,
+      },
+      {
+        category,
+        name: "Napkin caddy and utensil organizer set",
+        quantity: 1,
+        estimated_price: budgetTier === "lean" ? 12 : 18,
+        recommendation_reason:
+          "Makes the service area easier for guests to navigate and supports cleaner setup without overbuying more place settings.",
+        search_query: `${theme} party napkin caddy utensil organizer`,
+        image_url: null,
+      },
+      {
+        category,
+        name: "Serving spoon and tong host bundle",
+        quantity: 1,
+        estimated_price: budgetTier === "lean" ? 10 : 16,
+        recommendation_reason:
+          "Covers the practical tools hosts often realize they are missing once food service starts.",
+        search_query: `${theme} party serving spoons tongs set`,
+        image_url: null,
+      },
+    ];
+  }
+
+  if (normalizedCategory.includes("food") || normalizedCategory.includes("dessert")) {
+    return [
+      {
+        category,
+        name: "Dessert display stand and riser set",
+        quantity: 1,
+        estimated_price: budgetTier === "lean" ? 18 : 26,
+        recommendation_reason:
+          "Shifts the food recommendation toward presentation so the spread looks more intentional without changing the whole menu.",
+        search_query: `${theme} party dessert stand risers`,
+        image_url: null,
+      },
+      {
+        category,
+        name: "Snack bowl and grazing board bundle",
+        quantity: 1,
+        estimated_price: budgetTier === "lean" ? 16 : 24,
+        recommendation_reason:
+          "Supports a more casual self-serve food moment if you want guests to graze instead of clustering around one serving area.",
+        search_query: `${theme} party snack bowls grazing board set`,
+        image_url: null,
+      },
+      {
+        category,
+        name: "Cupcake and treat wrapper assortment",
+        quantity: Math.max(1, Math.ceil(guestCount / 18)),
+        estimated_price: budgetTier === "lean" ? 10 : 15,
+        recommendation_reason:
+          "Gives the dessert station a cleaner finish and helps smaller sweets feel easier to serve and photograph.",
+        search_query: `${theme} dessert wrappers treat stand party`,
+        image_url: null,
+      },
+    ];
+  }
+
+  if (normalizedCategory.includes("hosting")) {
+    return [
+      {
+        category,
+        name: "Trash concealment and cleanup station kit",
+        quantity: 1,
+        estimated_price: budgetTier === "lean" ? 12 : 18,
+        recommendation_reason:
+          "Improves host flow behind the scenes and solves the cleanup pain point guests notice when bins are missing or messy.",
+        search_query: `${theme} party trash bag holder cleanup station`,
+        image_url: null,
+      },
+      {
+        category,
+        name: "Guest comfort basket and restroom refresh set",
+        quantity: 1,
+        estimated_price: budgetTier === "lean" ? 14 : 22,
+        recommendation_reason:
+          "Adds a thoughtful host touch that feels different from the core party setup while still helping the event run smoothly.",
+        search_query: `${theme} guest bathroom basket party hosting`,
+        image_url: null,
+      },
+      {
+        category,
+        name: "Extension cord and setup utility bundle",
+        quantity: 1,
+        estimated_price: budgetTier === "lean" ? 14 : 20,
+        recommendation_reason:
+          "Keeps the setup practical if you are running lights, music, or warming pieces and need one host-side support pick.",
+        search_query: `${theme} party extension cord setup kit`,
+        image_url: null,
+      },
+    ];
+  }
+
+  if (normalizedCategory.includes("activity") || normalizedCategory.includes("favor")) {
+    return [
+      {
+        category,
+        name: "Photo booth prop and guest sign bundle",
+        quantity: 1,
+        estimated_price: budgetTier === "lean" ? 14 : 22,
+        recommendation_reason:
+          "Creates a more interactive guest moment if you want an alternate from the current activity or favor direction.",
+        search_query: `${theme} party photo booth props guest signs`,
+        image_url: null,
+      },
+      {
+        category,
+        name: "Take-home favor packaging kit",
+        quantity: Math.max(1, Math.ceil(guestCount / 16)),
+        estimated_price: budgetTier === "lean" ? 12 : 18,
+        recommendation_reason:
+          "Switches the emphasis from in-event activity to a simple take-home finish that still feels personal.",
+        search_query: `${theme} party favor boxes bags set`,
+        image_url: null,
+      },
+      {
+        category,
+        name: "Conversation starter card and table game set",
+        quantity: Math.max(1, Math.ceil(guestCount / 20)),
+        estimated_price: budgetTier === "lean" ? 10 : 16,
+        recommendation_reason:
+          "Gives guests something easy to engage with without needing a bigger activity setup or more space.",
+        search_query: `${theme} party conversation cards table game`,
+        image_url: null,
+      },
+    ];
+  }
+
+  return [
+    {
+      category,
+      name: `${toTitleCase(category)} alternate host pick`,
+      quantity: Math.max(1, currentItem.quantity),
+      estimated_price: budgetTier === "lean" ? 12 : 18,
+      recommendation_reason:
+        "This alternate keeps the category covered while giving you a different shopping direction from the current pick.",
+      search_query: `${theme} ${category} party host recommendation`,
+      image_url: null,
+    },
+  ];
 }
 
 function getShoppingItems(event: EventSeed, context?: ShoppingGenerationContext): GeneratedShoppingItem[] {
@@ -928,90 +1243,33 @@ function buildReplacementFallback(
   },
   context?: ShoppingReplacementContext,
 ) {
-  const blockedNames = new Set(
-    [currentItem.name, ...(context?.existingCategoryNames ?? [])].map((value) =>
-      value.trim().toLowerCase(),
-    ),
+  const blockedNames = [currentItem.name, ...(context?.existingCategoryNames ?? [])];
+  const replacementPool = buildReplacementPool(event, currentItem, context).map((item) =>
+    normalizeAmazonRecommendation(item),
   );
+
+  const poolMatch = replacementPool.find(
+    (item) => !isNameTooSimilar(item.name, blockedNames),
+  );
+
+  if (poolMatch) {
+    return poolMatch;
+  }
+
+  const blockedNameSet = new Set(blockedNames.map((value) => value.trim().toLowerCase()));
 
   const fallbackMatch = getShoppingItems(event, context).find(
     (item) =>
       item.category.toLowerCase() === currentItem.category.toLowerCase() &&
-      !blockedNames.has(item.name.trim().toLowerCase()),
+      !blockedNameSet.has(item.name.trim().toLowerCase()) &&
+      !isNameTooSimilar(item.name, blockedNames),
   );
 
   if (fallbackMatch) {
     return fallbackMatch;
   }
 
-  const theme = (context?.planTheme?.trim() || getTheme(event)).trim();
-  const category = currentItem.category.trim();
-  const normalizedCategory = category.toLowerCase();
-  const guestCount = getGuestCount(event);
-  const budgetTier = getBudgetTier(event);
-
-  if (normalizedCategory.includes("beverage") || normalizedCategory.includes("drink")) {
-    return normalizeAmazonRecommendation({
-      category,
-      name: "Self-serve drink garnish and ice add-on pack",
-      quantity: Math.max(1, Math.ceil(guestCount / 10)),
-      estimated_price: budgetTier === "lean" ? 10 : 16,
-      recommendation_reason:
-        "Gives the drink area a more complete feel without repeating the first beverage recommendation.",
-      search_query: `${theme} party drink garnish caddy ice bucket set`,
-      image_url: null,
-    });
-  }
-
-  if (normalizedCategory.includes("decor")) {
-    return normalizeAmazonRecommendation({
-      category,
-      name: "Accent lighting or tabletop styling bundle",
-      quantity: Math.max(1, Math.ceil(guestCount / 12)),
-      estimated_price: budgetTier === "lean" ? 16 : 24,
-      recommendation_reason:
-        "Offers a different decor angle so the setup feels layered instead of repeating the same type of piece.",
-      search_query: `${theme} party accent lighting centerpiece decor`,
-      image_url: null,
-    });
-  }
-
-  if (normalizedCategory.includes("table") || normalizedCategory.includes("serve")) {
-    return normalizeAmazonRecommendation({
-      category,
-      name: "Hosting extras for serving and cleanup",
-      quantity: Math.max(1, Math.ceil(guestCount / 14)),
-      estimated_price: budgetTier === "lean" ? 14 : 20,
-      recommendation_reason:
-        "Covers the host-side serving and reset details that usually get missed until the last minute.",
-      search_query: `${theme} party serving tray napkin caddy hosting set`,
-      image_url: null,
-    });
-  }
-
-  if (normalizedCategory.includes("food") || normalizedCategory.includes("dessert")) {
-    return normalizeAmazonRecommendation({
-      category,
-      name: "Serveware add-on for snacks or desserts",
-      quantity: Math.max(1, Math.ceil(guestCount / 16)),
-      estimated_price: budgetTier === "lean" ? 15 : 22,
-      recommendation_reason:
-        "Keeps the food setup flexible if you want another table moment without reworking the whole menu.",
-      search_query: `${theme} party dessert stand snack serveware`,
-      image_url: null,
-    });
-  }
-
-  return normalizeAmazonRecommendation({
-    category,
-    name: `${toTitleCase(category)} alternate host pick`,
-    quantity: Math.max(1, currentItem.quantity),
-    estimated_price: budgetTier === "lean" ? 12 : 18,
-    recommendation_reason:
-      "This alternate keeps the category covered while giving you a different shopping direction from the current pick.",
-    search_query: `${theme} ${category} party host recommendation`,
-    image_url: null,
-  });
+  return replacementPool[0];
 }
 
 export async function generateReplacementShoppingItem(
@@ -1024,6 +1282,8 @@ export async function generateReplacementShoppingItem(
   context?: ShoppingReplacementContext,
 ) {
   const fallback = buildReplacementFallback(event, currentItem, context);
+  const blockedNames = [currentItem.name, ...(context?.existingCategoryNames ?? [])];
+  const alternateAngles = buildReplacementAngles(currentItem.category);
   const contextLines = [
     context?.planTheme ? `Saved plan theme: ${context.planTheme}` : null,
     context?.menu?.length ? `Saved menu ideas: ${context.menu.join(", ")}` : null,
@@ -1035,6 +1295,8 @@ export async function generateReplacementShoppingItem(
     context?.existingCategoryNames?.length
       ? `Existing picks already in this category: ${context.existingCategoryNames.join(", ")}`
       : null,
+    `Avoid names that feel too close to: ${blockedNames.join(", ")}`,
+    `Try one of these alternate angles for this category: ${alternateAngles.join(", ")}`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -1055,6 +1317,8 @@ Requirements:
 - Return exactly one replacement item in the same category.
 - The replacement must have a different name from the current item.
 - Do not repeat any existing picks already listed in this category.
+- Do not reuse the same core nouns from the current item unless absolutely necessary.
+- Push the recommendation toward a different angle within the category instead of making a tiny variation.
 - Keep the quantity realistic for the guest count and event type.
 - Include recommendation_reason explaining why this alternate is a better fit.
 - Include search_query with the Amazon search phrase to use.
@@ -1091,19 +1355,14 @@ Requirements:
     ...generated.data,
     category: currentItem.category,
   });
-  const blockedNames = new Set(
-    [currentItem.name, ...(context?.existingCategoryNames ?? [])].map((value) =>
-      value.trim().toLowerCase(),
-    ),
-  );
 
-  if (blockedNames.has(normalizedItem.name.trim().toLowerCase())) {
+  if (isNameTooSimilar(normalizedItem.name, blockedNames)) {
     return {
       item: fallback,
       rawResponse: {
         provider: "party-genie-structured-fallback",
         generatedAt: new Date().toISOString(),
-        summary: `Used fallback because the generated replacement matched an existing pick for "${currentItem.name}".`,
+        summary: `Used fallback because the generated replacement was too similar to an existing pick for "${currentItem.name}".`,
         model: getOpenAIModel("lightweight"),
         promptVersion: getPromptVersion("shopping_list_transform"),
         usage: {
