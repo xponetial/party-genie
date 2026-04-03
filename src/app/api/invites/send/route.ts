@@ -104,16 +104,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "No invite exists for this event yet." }, { status: 400 });
   }
 
-  if (!invite.is_public) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "Enable the public RSVP link before sending invite emails.",
-      },
-      { status: 400 },
-    );
-  }
-
   const emailableGuests = guests.filter((guest) => Boolean(guest.email));
   const sendableGuests =
     deliveryType === "reminder"

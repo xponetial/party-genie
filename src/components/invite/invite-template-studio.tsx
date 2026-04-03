@@ -198,16 +198,9 @@ export function InviteTemplateStudio({
               <p className="text-xs uppercase tracking-[0.18em] text-ink-muted">Card copy</p>
               <h3 className="mt-2 text-xl font-semibold text-ink">Edit the invitation details</h3>
             </div>
-            <label className="flex items-center gap-3 rounded-2xl border border-border bg-[rgba(237,243,255,0.92)] px-4 py-3 text-sm text-ink">
-              <input
-                type="checkbox"
-                name="isPublic"
-                value="true"
-                defaultChecked={invite.is_public}
-                className="size-4 accent-[var(--brand)]"
-              />
-              Enable public RSVP link
-            </label>
+            <p className="rounded-2xl border border-border bg-[rgba(237,243,255,0.92)] px-4 py-3 text-sm text-ink">
+              RSVP links are live automatically for guest invites.
+            </p>
           </div>
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">

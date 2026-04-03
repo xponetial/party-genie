@@ -89,12 +89,12 @@ export function GuestListCard({
                 </div>
 
                 <div className="mt-4 rounded-3xl bg-canvas px-4 py-3 text-sm text-ink-muted">
-                  {invite?.is_public ? (
+                  {invite ? (
                     <span className="break-all text-brand">
                       {`/rsvp/${invite.public_slug}?guest=${guest.rsvp_token}`}
                     </span>
                   ) : (
-                    "Enable public invite first to generate a live RSVP link."
+                    "Guest RSVP links will appear here once the invite record is ready."
                   )}
                 </div>
 
@@ -233,7 +233,6 @@ export function GuestListCard({
           <div className="mt-5">
             <InviteSendButton
               eventId={eventId}
-              inviteEnabled={invite.is_public}
               pendingInviteCount={pendingInviteCount}
               remindableGuestCount={remindableGuestCount}
               emailableGuestCount={emailableGuestCount}

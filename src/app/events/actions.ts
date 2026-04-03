@@ -65,7 +65,6 @@ const inviteSchema = z.object({
   eventId: z.string().uuid(),
   inviteId: z.string().uuid(),
   inviteCopy: z.string().trim().min(10),
-  isPublic: z.enum(["true", "false"]).default("false"),
   designJson: z.string().optional(),
 });
 
@@ -238,7 +237,7 @@ export async function createEventAction(formData: FormData) {
       event_id: event.id,
       design_json: designJson,
       invite_copy: inviteCopy,
-      is_public: false,
+      is_public: true,
     }),
     supabase.from("shopping_lists").insert({
       event_id: event.id,
@@ -309,7 +308,6 @@ export async function saveInviteAction(formData: FormData) {
     eventId: formData.get("eventId"),
     inviteId: formData.get("inviteId"),
     inviteCopy: formData.get("inviteCopy"),
-    isPublic: formData.get("isPublic") ?? "false",
     designJson: formData.get("designJson")?.toString(),
   });
 
@@ -331,7 +329,7 @@ export async function saveInviteAction(formData: FormData) {
       .update({
         design_json: designJson,
         invite_copy: parsed.data.inviteCopy,
-        is_public: parsed.data.isPublic === "true",
+        is_public: true,
       })
       .eq("id", parsed.data.inviteId),
     supabase
