@@ -1256,6 +1256,7 @@ export async function replaceShoppingItemForEvent(
   supabase: SupabaseClient,
   eventId: string,
   itemId: string,
+  feedback: "general" | "too_expensive" | "not_my_style" = "general",
 ) {
   const event = await loadEventSeed(supabase, eventId);
   const { data: currentItem, error: currentItemError } = await supabase
@@ -1293,16 +1294,18 @@ export async function replaceShoppingItemForEvent(
       name: currentItem.name,
       quantity: currentItem.quantity,
     },
-    {
-      planTheme: planContext?.theme ?? null,
-      menu: planContext?.menu ?? [],
-      shoppingCategories: planContext?.shopping_categories ?? [],
-      existingCategoryNames: siblingItems.map((item) => item.name),
-    },
-  );
+      {
+        planTheme: planContext?.theme ?? null,
+        menu: planContext?.menu ?? [],
+        shoppingCategories: planContext?.shopping_categories ?? [],
+        existingCategoryNames: siblingItems.map((item) => item.name),
+        feedback,
+      },
+    );
   const requestFingerprint = buildFingerprint({
     ...buildEventFingerprint(event, "shopping_list_transform"),
     replaceItemId: currentItem.id,
+    replacementFeedback: feedback,
     replaceCategory: currentItem.category.trim().toLowerCase(),
     currentItemName: currentItem.name.trim().toLowerCase(),
     siblingCategoryNames: siblingItems

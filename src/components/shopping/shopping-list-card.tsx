@@ -465,18 +465,47 @@ export function ShoppingListCard({
                                   </Button>
                                 ) : null}
                                 {item.status !== "purchased" && item.status !== "removed" ? (
-                                  <form action={replaceShoppingItemAction}>
-                                    <input type="hidden" name="eventId" value={eventId} />
-                                    <input
-                                      type="hidden"
-                                      name="shoppingListId"
-                                      value={shoppingList?.id ?? ""}
-                                    />
-                                    <input type="hidden" name="itemId" value={item.id} />
-                                    <SubmitButton pendingLabel="Replacing pick..." variant="secondary">
-                                      Replace this pick
-                                    </SubmitButton>
-                                  </form>
+                                  <>
+                                    <form action={replaceShoppingItemAction}>
+                                      <input type="hidden" name="eventId" value={eventId} />
+                                      <input
+                                        type="hidden"
+                                        name="shoppingListId"
+                                        value={shoppingList?.id ?? ""}
+                                      />
+                                      <input type="hidden" name="itemId" value={item.id} />
+                                      <input type="hidden" name="feedback" value="general" />
+                                      <SubmitButton pendingLabel="Replacing pick..." variant="secondary">
+                                        Replace this pick
+                                      </SubmitButton>
+                                    </form>
+                                    <form action={replaceShoppingItemAction}>
+                                      <input type="hidden" name="eventId" value={eventId} />
+                                      <input
+                                        type="hidden"
+                                        name="shoppingListId"
+                                        value={shoppingList?.id ?? ""}
+                                      />
+                                      <input type="hidden" name="itemId" value={item.id} />
+                                      <input type="hidden" name="feedback" value="too_expensive" />
+                                      <SubmitButton pendingLabel="Finding lower-cost option..." variant="secondary">
+                                        Too expensive
+                                      </SubmitButton>
+                                    </form>
+                                    <form action={replaceShoppingItemAction}>
+                                      <input type="hidden" name="eventId" value={eventId} />
+                                      <input
+                                        type="hidden"
+                                        name="shoppingListId"
+                                        value={shoppingList?.id ?? ""}
+                                      />
+                                      <input type="hidden" name="itemId" value={item.id} />
+                                      <input type="hidden" name="feedback" value="not_my_style" />
+                                      <SubmitButton pendingLabel="Finding different style..." variant="secondary">
+                                        Not my style
+                                      </SubmitButton>
+                                    </form>
+                                  </>
                                 ) : null}
                                 <Button asChild variant="secondary">
                                   <Link href={`#manual-item-${item.id}`}>Adjust details</Link>

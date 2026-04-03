@@ -104,6 +104,7 @@ const replaceShoppingItemSchema = z.object({
   eventId: z.string().uuid(),
   shoppingListId: z.string().uuid(),
   itemId: z.string().uuid(),
+  feedback: z.enum(["general", "too_expensive", "not_my_style"]).default("general"),
 });
 
 const shoppingSettingsSchema = z.object({
@@ -696,6 +697,7 @@ export async function replaceShoppingItemAction(formData: FormData) {
     eventId: formData.get("eventId"),
     shoppingListId: formData.get("shoppingListId"),
     itemId: formData.get("itemId"),
+    feedback: formData.get("feedback") || "general",
   });
 
   if (!parsed.success) return;
@@ -714,6 +716,7 @@ export async function replaceShoppingItemAction(formData: FormData) {
     supabase,
     parsed.data.eventId,
     parsed.data.itemId,
+    parsed.data.feedback,
   );
 
   await Promise.all([
@@ -721,21 +724,23 @@ export async function replaceShoppingItemAction(formData: FormData) {
       eventName: "shopping_pick_replaced",
       userId: user.id,
       eventId: parsed.data.eventId,
-      metadata: {
-        source: "replace_pick",
-        item_id: parsed.data.itemId,
-        replacement_name: result.itemName,
-      },
+        metadata: {
+          source: "replace_pick",
+          feedback: parsed.data.feedback,
+          item_id: parsed.data.itemId,
+          replacement_name: result.itemName,
+        },
     }),
     createAuditLog(supabase, {
       action: "shopping_item_replaced",
       userId: user.id,
       eventId: parsed.data.eventId,
-      metadata: {
-        item_id: parsed.data.itemId,
-        replacement_name: result.itemName,
-        estimated_total: result.estimatedTotal,
-      },
+        metadata: {
+          item_id: parsed.data.itemId,
+          feedback: parsed.data.feedback,
+          replacement_name: result.itemName,
+          estimated_total: result.estimatedTotal,
+        },
     }),
   ]);
 
