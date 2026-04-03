@@ -157,6 +157,18 @@ function truncateSearchQuery(value: string | null, maxLength = 72) {
   return `${value.slice(0, maxLength - 1).trimEnd()}...`;
 }
 
+function formatPriceChip(value: number | null) {
+  if (value == null) {
+    return "Estimate later";
+  }
+
+  return formatMoney(value);
+}
+
+function formatStatusChip(value: ShoppingItemDetails["status"]) {
+  return value.replace(/_/g, " ");
+}
+
 function getCategoryVisualPath(category: string) {
   const normalizedCategory = category.trim().toLowerCase();
 
@@ -223,14 +235,20 @@ function buildTrackedShoppingHref({
   eventId: string;
   item: ShoppingItemDetails;
 }) {
-  if (!item.external_url) {
+  const target =
+    item.external_url ||
+    (item.search_query
+      ? `https://www.amazon.com/s?k=${encodeURIComponent(item.search_query.trim())}`
+      : null);
+
+  if (!target) {
     return null;
   }
 
   const params = new URLSearchParams({
     eventId,
     itemId: item.id,
-    target: item.external_url,
+    target,
   });
 
   return `/api/affiliate/click?${params.toString()}`;
@@ -420,6 +438,7 @@ export function ShoppingListCard({
                     {categoryItems.map((item) => {
                       const trackedHref = buildTrackedShoppingHref({ eventId, item });
                       const confidenceTags = buildConfidenceTags(item, event, plan);
+                      const hasSearchHint = Boolean(item.search_query?.trim());
 
                       return (
                         <div
@@ -446,15 +465,19 @@ export function ShoppingListCard({
                                 <div className="mt-4 flex flex-wrap gap-2 text-xs uppercase tracking-[0.18em] text-ink-muted">
                                   <span className="rounded-full bg-white px-3 py-2">Qty {item.quantity}</span>
                                   <span className="rounded-full bg-white px-3 py-2">
-                                    {formatMoney(item.estimated_price)}
+                                    {formatPriceChip(item.estimated_price)}
                                   </span>
-                                  <span className="rounded-full bg-white px-3 py-2">{item.status}</span>
+                                  <span className="rounded-full bg-white px-3 py-2 capitalize">
+                                    {formatStatusChip(item.status)}
+                                  </span>
                                 </div>
                               </div>
+                            </div>
 
-                              <div className="flex shrink-0 flex-wrap gap-3 [@media(min-width:1700px)]:justify-end">
+                            <div className="rounded-[1.2rem] border border-border bg-white/82 p-3">
+                              <div className="flex flex-wrap items-center gap-3">
                                 {trackedHref ? (
-                                  <Button asChild>
+                                  <Button asChild className="min-w-[10.5rem]">
                                     <a
                                       href={trackedHref}
                                       rel="noreferrer"
@@ -463,7 +486,11 @@ export function ShoppingListCard({
                                       View on Amazon
                                     </a>
                                   </Button>
-                                ) : null}
+                                ) : (
+                                  <span className="rounded-full border border-dashed border-border bg-[rgba(244,247,255,0.92)] px-4 py-3 text-sm text-ink-muted">
+                                    Search link coming soon
+                                  </span>
+                                )}
                                 {item.status !== "purchased" && item.status !== "removed" ? (
                                   <>
                                     <form action={replaceShoppingItemAction}>
@@ -475,7 +502,11 @@ export function ShoppingListCard({
                                       />
                                       <input type="hidden" name="itemId" value={item.id} />
                                       <input type="hidden" name="feedback" value="general" />
-                                      <SubmitButton pendingLabel="Replacing pick..." variant="secondary">
+                                      <SubmitButton
+                                        className="min-w-[10.5rem]"
+                                        pendingLabel="Replacing pick..."
+                                        variant="secondary"
+                                      >
                                         Replace this pick
                                       </SubmitButton>
                                     </form>
@@ -488,7 +519,11 @@ export function ShoppingListCard({
                                       />
                                       <input type="hidden" name="itemId" value={item.id} />
                                       <input type="hidden" name="feedback" value="too_expensive" />
-                                      <SubmitButton pendingLabel="Finding lower-cost option..." variant="secondary">
+                                      <SubmitButton
+                                        className="min-w-[10.5rem]"
+                                        pendingLabel="Finding lower-cost option..."
+                                        variant="secondary"
+                                      >
                                         Too expensive
                                       </SubmitButton>
                                     </form>
@@ -501,26 +536,30 @@ export function ShoppingListCard({
                                       />
                                       <input type="hidden" name="itemId" value={item.id} />
                                       <input type="hidden" name="feedback" value="not_my_style" />
-                                      <SubmitButton pendingLabel="Finding different style..." variant="secondary">
+                                      <SubmitButton
+                                        className="min-w-[10.5rem]"
+                                        pendingLabel="Finding different style..."
+                                        variant="secondary"
+                                      >
                                         Not my style
                                       </SubmitButton>
                                     </form>
                                   </>
                                 ) : null}
-                                <Button asChild variant="secondary">
+                                <Button asChild className="min-w-[10.5rem]" variant="secondary">
                                   <Link href={`#manual-item-${item.id}`}>Adjust details</Link>
                                 </Button>
                               </div>
-                            </div>
 
-                            {item.search_query ? (
-                              <div className="rounded-[1.1rem] border border-border bg-white/80 px-4 py-3 text-sm text-ink-muted">
+                              <div className="mt-3 rounded-[1rem] border border-border bg-white/80 px-4 py-3 text-sm text-ink-muted">
                                 <span className="mr-2 text-xs uppercase tracking-[0.18em] text-ink-muted">
                                   Amazon search
                                 </span>
-                                {truncateSearchQuery(item.search_query)}
+                                {hasSearchHint
+                                  ? truncateSearchQuery(item.search_query)
+                                  : "Search phrase will appear after the next refresh or replacement."}
                               </div>
-                            ) : null}
+                            </div>
                           </div>
                         </div>
                         </div>
