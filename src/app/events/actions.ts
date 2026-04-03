@@ -53,6 +53,12 @@ const bulkGuestRowSchema = z.object({
   plusOneCount: z.coerce.number().int().min(0).default(0),
 });
 
+export type GuestImportActionState = {
+  error?: string;
+  success?: string;
+  importedCount?: number;
+};
+
 const updateGuestSchema = guestSchema.extend({
   guestId: z.string().uuid(),
   status: z.enum(["pending", "confirmed", "declined"]),
@@ -529,32 +535,53 @@ export async function addGuestAction(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
-export async function importGuestsAction(formData: FormData) {
-  const { supabase } = await requireUser();
-  const eventId = z.string().uuid().parse(formData.get("eventId"));
-  const file = formData.get("guestCsv");
+export async function importGuestsAction(
+  _prevState: GuestImportActionState,
+  formData: FormData,
+): Promise<GuestImportActionState> {
+  try {
+    const { supabase } = await requireUser();
+    const eventId = z.string().uuid().parse(formData.get("eventId"));
+    const file = formData.get("guestCsv");
 
-  if (!(file instanceof File) || file.size === 0) {
-    throw new Error("Upload a CSV file with your guest list.");
+    if (!(file instanceof File) || file.size === 0) {
+      return {
+        error: "Upload a CSV file with your guest list.",
+      };
+    }
+
+    const csvText = await file.text();
+    const guests = parseGuestImportCsv(csvText);
+    const { error } = await supabase.from("guests").insert(
+      guests.map((guest) => ({
+        event_id: eventId,
+        name: guest.name,
+        email: guest.email || null,
+        phone: guest.phone?.trim() || null,
+        plus_one_count: guest.plusOneCount,
+      })),
+    );
+
+    if (error) {
+      return {
+        error: `Couldn't import the guest list yet. ${error.message}`,
+      };
+    }
+
+    revalidatePath(`/events/${eventId}`);
+    revalidatePath(`/events/${eventId}/guests`);
+    revalidatePath(`/events/${eventId}/invite`);
+    revalidatePath("/dashboard");
+
+    return {
+      success: `Imported ${guests.length} guest${guests.length === 1 ? "" : "s"}.`,
+      importedCount: guests.length,
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Guest import failed.",
+    };
   }
-
-  const csvText = await file.text();
-  const guests = parseGuestImportCsv(csvText);
-
-  await supabase.from("guests").insert(
-    guests.map((guest) => ({
-      event_id: eventId,
-      name: guest.name,
-      email: guest.email || null,
-      phone: guest.phone?.trim() || null,
-      plus_one_count: guest.plusOneCount,
-    })),
-  );
-
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath(`/events/${eventId}/guests`);
-  revalidatePath(`/events/${eventId}/invite`);
-  revalidatePath("/dashboard");
 }
 
 export async function updateGuestAction(formData: FormData) {

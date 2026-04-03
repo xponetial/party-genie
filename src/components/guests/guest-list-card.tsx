@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { addGuestAction, deleteGuestAction, importGuestsAction, updateGuestAction } from "@/app/events/actions";
+import { addGuestAction, deleteGuestAction, updateGuestAction } from "@/app/events/actions";
+import { GuestImportForm } from "@/components/guests/guest-import-form";
 import { InviteSendButton } from "@/components/invite/invite-send-button";
 import { type GuestDetails, type GuestMessageDetails, type InviteDetails } from "@/lib/events";
 import { Button } from "@/components/ui/button";
@@ -83,16 +84,7 @@ export function GuestListCard({
             </Button>
           </div>
 
-          <form action={importGuestsAction} className="mt-4 grid gap-4 md:grid-cols-[1fr_auto]">
-            <input type="hidden" name="eventId" value={eventId} />
-            <div className="space-y-2">
-              <Label htmlFor="guest-csv">Upload completed guest CSV</Label>
-              <Input id="guest-csv" name="guestCsv" type="file" accept=".csv,text/csv" required />
-            </div>
-            <div className="flex items-end">
-              <SubmitButton pendingLabel="Importing guests...">Import guest list</SubmitButton>
-            </div>
-          </form>
+          <GuestImportForm eventId={eventId} />
         </div>
 
         <div className="mt-6 grid gap-4">
