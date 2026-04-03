@@ -287,9 +287,6 @@ export function InviteTemplateStudio({
                 value={design.fields.messageText}
               />
             </label>
-            <div className="rounded-[1.5rem] border border-border bg-[rgba(237,243,255,0.92)] px-4 py-3 text-sm text-ink-muted">
-              RSVP call-to-action text is fixed automatically for guests.
-            </div>
           </div>
 
           <div className="mt-5">
