@@ -23,7 +23,7 @@ export async function uploadInvitePreviewImage({
   const { error: uploadError } = await supabase.storage
     .from(INVITE_PREVIEW_BUCKET)
     .upload(filePath, png, {
-      cacheControl: "3600",
+      cacheControl: "60",
       contentType: "image/png",
       upsert: true,
     });
@@ -36,6 +36,6 @@ export async function uploadInvitePreviewImage({
 
   return {
     filePath,
-    publicUrl: data.publicUrl,
+    publicUrl: `${data.publicUrl}?v=${Date.now()}`,
   };
 }
