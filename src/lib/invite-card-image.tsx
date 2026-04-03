@@ -245,7 +245,7 @@ export async function createInviteCardImagePng(invite: PublicInviteImageRecord) 
   const design = invite.design_json
     ? normalizeInviteDesignData(invite.design_json, fallbackDesign)
     : fallbackDesign;
-  const emailCtaText = "RSVP with your private link";
+  const emailCtaText = "RSVP now";
   const template = resolveTemplate(templateCategories, design, invite.event_type);
   const layout = template ? getInviteCardLayout(template) : null;
   const titleTop = layout?.titleTop ?? 18;
