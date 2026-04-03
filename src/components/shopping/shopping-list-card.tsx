@@ -97,14 +97,14 @@ function buildRecommendationVisual(item: ShoppingItemDetails) {
   if (item.image_url) {
     return (
       <div
-        className="h-28 rounded-[1.35rem] bg-cover bg-center md:h-full md:min-h-40"
+        className="h-28 rounded-[1.35rem] bg-cover bg-center lg:h-full lg:min-h-40"
         style={{ backgroundImage: `url(${item.image_url})` }}
       />
     );
   }
 
   return (
-    <div className="flex h-28 items-end rounded-[1.35rem] border border-white/70 bg-[linear-gradient(145deg,rgba(37,146,255,0.22)_0%,rgba(118,97,255,0.18)_45%,rgba(255,255,255,0.94)_100%)] p-4 md:h-full md:min-h-40">
+    <div className="flex h-28 items-end rounded-[1.35rem] border border-white/70 bg-[linear-gradient(145deg,rgba(37,146,255,0.22)_0%,rgba(118,97,255,0.18)_45%,rgba(255,255,255,0.94)_100%)] p-4 lg:h-full lg:min-h-40">
       <div>
         <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Amazon search pick</p>
         <p className="mt-2 text-lg font-semibold text-ink">{categoryLabel}</p>
@@ -231,7 +231,7 @@ export function ShoppingListCard({
         ))}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="grid gap-4 2xl:grid-cols-[1.15fr_0.85fr]">
         <Card className="bg-[rgba(244,247,255,0.9)]">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -267,11 +267,11 @@ export function ShoppingListCard({
                         key={item.id}
                         className="rounded-[1.5rem] border border-border bg-[linear-gradient(135deg,rgba(255,255,255,0.96)_0%,rgba(244,247,255,0.92)_100%)] p-4"
                       >
-                        <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
+                        <div className="grid gap-4 xl:grid-cols-[200px_minmax(0,1fr)]">
                           {buildRecommendationVisual(item)}
 
                           <div className="flex min-w-0 flex-col justify-between gap-4">
-                            <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                            <div className="flex min-w-0 flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
                               <div className="min-w-0 max-w-2xl">
                                 <p className="text-xl font-semibold leading-8 text-ink">{item.name}</p>
                                 <p className="mt-2 max-w-xl text-sm leading-7 text-ink-muted">
@@ -286,7 +286,7 @@ export function ShoppingListCard({
                                 </div>
                               </div>
 
-                              <div className="flex shrink-0 flex-wrap gap-3 xl:justify-end">
+                              <div className="flex shrink-0 flex-wrap gap-3 2xl:justify-end">
                                 {item.external_url ? (
                                   <Button asChild>
                                     <a href={item.external_url} rel="noreferrer" target="_blank">
