@@ -231,7 +231,7 @@ export function ShoppingListCard({
         ))}
       </div>
 
-      <div className="grid gap-4 2xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="grid gap-4 [@media(min-width:1700px)]:grid-cols-[1.15fr_0.85fr]">
         <Card className="bg-[rgba(244,247,255,0.9)]">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -267,11 +267,11 @@ export function ShoppingListCard({
                         key={item.id}
                         className="rounded-[1.5rem] border border-border bg-[linear-gradient(135deg,rgba(255,255,255,0.96)_0%,rgba(244,247,255,0.92)_100%)] p-4"
                       >
-                        <div className="grid gap-4 xl:grid-cols-[200px_minmax(0,1fr)]">
+                        <div className="grid gap-4 [@media(min-width:1500px)]:grid-cols-[200px_minmax(0,1fr)]">
                           {buildRecommendationVisual(item)}
 
                           <div className="flex min-w-0 flex-col justify-between gap-4">
-                            <div className="flex min-w-0 flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
+                            <div className="flex min-w-0 flex-col gap-4 [@media(min-width:1700px)]:flex-row [@media(min-width:1700px)]:items-start [@media(min-width:1700px)]:justify-between">
                               <div className="min-w-0 max-w-2xl">
                                 <p className="text-xl font-semibold leading-8 text-ink">{item.name}</p>
                                 <p className="mt-2 max-w-xl text-sm leading-7 text-ink-muted">
@@ -286,7 +286,7 @@ export function ShoppingListCard({
                                 </div>
                               </div>
 
-                              <div className="flex shrink-0 flex-wrap gap-3 2xl:justify-end">
+                              <div className="flex shrink-0 flex-wrap gap-3 [@media(min-width:1700px)]:justify-end">
                                 {item.external_url ? (
                                   <Button asChild>
                                     <a href={item.external_url} rel="noreferrer" target="_blank">
