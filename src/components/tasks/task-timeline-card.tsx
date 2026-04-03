@@ -5,11 +5,13 @@ import {
   updateTaskAction,
 } from "@/app/events/actions";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { type TaskDetails, type TimelineItemDetails } from "@/lib/events";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/ui/submit-button";
+import Link from "next/link";
 
 function formatPhaseLabel(value: string | null | undefined) {
   if (!value) return "General";
@@ -43,6 +45,7 @@ export function TaskTimelineCard({
       <Card>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Step 4 of 4</p>
             <h2 className="text-xl font-semibold text-ink">Timeline and task tracker</h2>
             <p className="mt-2 text-sm leading-6 text-ink-muted">
               Keep the event moving with a clean prep checklist and a day-of run-of-show the host
@@ -254,6 +257,18 @@ export function TaskTimelineCard({
               )}
             </div>
           </div>
+        </div>
+
+        <div className="mt-6 rounded-[1.75rem] border border-border bg-[rgba(244,247,255,0.92)] p-5">
+          <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Final review</p>
+          <h3 className="mt-2 text-xl font-semibold text-ink">You are ready for the host pass</h3>
+          <p className="mt-2 text-sm leading-6 text-ink-muted">
+            Once the checklist and run-of-show feel right, head back to the event hub for one final
+            review across invite, guests, shopping, and timing.
+          </p>
+          <Button asChild className="mt-4">
+            <Link href={`/events/${eventId}`}>Back to event hub</Link>
+          </Button>
         </div>
       </Card>
     </div>

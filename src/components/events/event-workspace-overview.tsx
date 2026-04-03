@@ -43,6 +43,7 @@ type HubStep = {
   href: string;
   label: string;
   detail: string;
+  step: string;
 };
 
 function slugify(value: string) {
@@ -124,6 +125,7 @@ function getPrimaryStep({
       href: `/events/${eventId}/invite`,
       label: "Finish the invite",
       detail: "Tighten the wording and make sure the card looks ready to send.",
+      step: "Step 1 of 4",
     };
   }
 
@@ -132,6 +134,7 @@ function getPrimaryStep({
       href: `/events/${eventId}/guests`,
       label: "Add your guests",
       detail: "Bring in attendees so RSVP tracking and invite delivery can begin.",
+      step: "Step 2 of 4",
     };
   }
 
@@ -140,6 +143,7 @@ function getPrimaryStep({
       href: `/events/${eventId}/shopping`,
       label: "Review shopping recommendations",
       detail: "Turn the plan into a real item list with spend and retailer choices.",
+      step: "Step 3 of 4",
     };
   }
 
@@ -148,13 +152,15 @@ function getPrimaryStep({
       href: `/events/${eventId}/timeline`,
       label: "Build the timeline",
       detail: "Add tasks and timing so the event can move from planning into execution.",
+      step: "Step 4 of 4",
     };
   }
 
   return {
     href: `/events/${eventId}/guests`,
-    label: "Check guest delivery",
-    detail: "See who has been invited, who has replied, and who still needs a nudge.",
+    label: "Run the final host check",
+    detail: "Review guests, shopping, and timing one last time before the event goes live.",
+    step: "Ready to host",
   };
 }
 
@@ -276,8 +282,9 @@ export async function EventWorkspaceOverview({
           </div>
 
           <div className="w-full max-w-md rounded-[1.9rem] border border-white/80 bg-[linear-gradient(140deg,rgba(39,147,255,0.92)_0%,rgba(118,97,255,0.9)_48%,rgba(187,119,255,0.86)_100%)] p-5 text-white shadow-party">
-            <p className="text-xs uppercase tracking-[0.22em] text-white/70">Next best step</p>
-            <h3 className="mt-3 text-2xl font-semibold">{primaryStep.label}</h3>
+              <p className="text-xs uppercase tracking-[0.22em] text-white/70">Next best step</p>
+              <p className="mt-2 text-sm font-medium text-white/75">{primaryStep.step}</p>
+              <h3 className="mt-3 text-2xl font-semibold">{primaryStep.label}</h3>
             <p className="mt-3 text-sm leading-6 text-white/85">{primaryStep.detail}</p>
             <Button asChild className="mt-5 w-full bg-white text-ink hover:bg-white/90">
               <Link href={primaryStep.href}>

@@ -39,6 +39,7 @@ export function GuestListCard({
       <Card>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Step 2 of 4</p>
             <h2 className="text-xl font-semibold text-ink">Guest management</h2>
             <p className="mt-2 text-sm leading-6 text-ink-muted">
               Add guests directly into Supabase and keep RSVP tracking live on the event.
@@ -307,6 +308,7 @@ export function GuestListCard({
           </div>
         </div>
         <div className="mt-6 rounded-3xl border border-border bg-white/85 p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Next step</p>
           <p className="text-sm leading-6 text-ink-muted">
             Guest details are in place. Continue to shopping recommendations to review items,
             retailer options, and estimated spend.

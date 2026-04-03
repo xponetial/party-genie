@@ -195,6 +195,7 @@ export function InviteTemplateStudio({
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
+              <p className="text-xs uppercase tracking-[0.18em] text-ink-muted">Step 1 of 4</p>
               <p className="text-xs uppercase tracking-[0.18em] text-ink-muted">Card copy</p>
               <h3 className="mt-2 text-xl font-semibold text-ink">Edit the invitation details</h3>
             </div>
@@ -296,6 +297,7 @@ export function InviteTemplateStudio({
           </div>
 
           <div className="mt-4 rounded-[1.5rem] border border-border bg-[rgba(244,247,255,0.9)] p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-ink-muted">Next step</p>
             <p className="text-sm leading-6 text-ink-muted">
               Once the card looks right, move into guest management to add recipients, review RSVP
               status, and send the invite.

@@ -328,6 +328,7 @@ export function ShoppingListCard({
         <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-3xl">
             <Badge>Amazon-style recommendations</Badge>
+            <p className="mt-4 text-xs uppercase tracking-[0.2em] text-ink-muted">Step 3 of 4</p>
             <h2 className="mt-4 text-3xl font-semibold tracking-tight text-ink">
               Party Genie Shopping
             </h2>
@@ -768,6 +769,18 @@ export function ShoppingListCard({
                 </div>
               )}
             </div>
+          </Card>
+
+          <Card className="bg-white/80">
+            <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Next step</p>
+            <h3 className="mt-2 text-xl font-semibold text-ink">Turn the plan into a host-ready timeline</h3>
+            <p className="mt-2 text-sm leading-6 text-ink-muted">
+              Once the shopping handoff looks right, move into the timeline to lock your checklist
+              and day-of run-of-show.
+            </p>
+            <Button asChild className="mt-4">
+              <Link href={`/events/${eventId}/timeline`}>Next: Timeline and tasks</Link>
+            </Button>
           </Card>
         </div>
       </div>
