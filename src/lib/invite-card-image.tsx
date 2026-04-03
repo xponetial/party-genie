@@ -148,6 +148,22 @@ async function getTemplateBackground(assetPath: string) {
   return readFile(absoluteAssetPath);
 }
 
+function buildFrameSvg() {
+  return `
+    <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" viewBox="0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="canvasBg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#eef3ff" />
+          <stop offset="100%" stop-color="#edf2ff" />
+        </linearGradient>
+      </defs>
+
+      <rect width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" rx="34" fill="url(#canvasBg)" />
+      <rect x="${CARD_X}" y="${CARD_Y}" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" rx="${FRAME_RADIUS}" fill="#131a4a" />
+    </svg>
+  `.trim();
+}
+
 function buildOverlaySvg(params: {
   title: string;
   subtitle: string;
@@ -197,10 +213,6 @@ function buildOverlaySvg(params: {
   return `
     <svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" viewBox="0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <linearGradient id="canvasBg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#eef3ff" />
-          <stop offset="100%" stop-color="#edf2ff" />
-        </linearGradient>
         <linearGradient id="imageShade" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="rgba(4,8,28,0.18)" />
           <stop offset="42%" stop-color="rgba(8,12,36,0.08)" />
@@ -212,12 +224,10 @@ function buildOverlaySvg(params: {
         </linearGradient>
       </defs>
 
-      <rect width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" rx="34" fill="url(#canvasBg)" />
       <text x="${CARD_X}" y="28" fill="#6f63d9" font-family="sans-serif" font-size="15" letter-spacing="5" text-transform="uppercase">
         AI PARTY GENIE INVITATION
       </text>
 
-      <rect x="${CARD_X}" y="${CARD_Y}" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" rx="${FRAME_RADIUS}" fill="#131a4a" />
       <rect x="${IMAGE_X}" y="${IMAGE_Y}" width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT}" rx="18" fill="rgba(255,255,255,0.08)" />
       <rect x="${IMAGE_X}" y="${IMAGE_Y}" width="${IMAGE_WIDTH}" height="${IMAGE_HEIGHT}" rx="18" fill="url(#imageShade)" />
 
@@ -364,6 +374,7 @@ export async function createInviteCardImagePng(invite: PublicInviteImageRecord) 
     titleLetterSpacing,
     eyebrowLetterSpacing,
   });
+  const frameSvg = buildFrameSvg();
 
   return sharp({
     create: {
@@ -374,6 +385,11 @@ export async function createInviteCardImagePng(invite: PublicInviteImageRecord) 
     },
   })
     .composite([
+      {
+        input: Buffer.from(frameSvg),
+        left: 0,
+        top: 0,
+      },
       {
         input: resizedBackground,
         left: IMAGE_X,
