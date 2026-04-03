@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { loginAction, type AuthActionState } from "@/app/(auth)/actions";
 import { AuthSubmitButton } from "@/components/auth/auth-submit-button";
@@ -26,6 +27,11 @@ export function LoginForm() {
           placeholder="Enter your password"
           required
         />
+      </div>
+      <div className="flex justify-end">
+        <Link href="/forgot-password" className="text-sm font-medium text-brand hover:text-brand-dark">
+          Forgot password?
+        </Link>
       </div>
       {state.error ? (
         <p

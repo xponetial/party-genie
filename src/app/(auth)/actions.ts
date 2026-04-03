@@ -7,6 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type AuthActionState = {
   error?: string;
+  success?: string;
 };
 
 const loginSchema = z.object({
@@ -19,6 +20,10 @@ const signupSchema = z.object({
   lastName: z.string().trim().min(1, "Last name is required."),
   email: z.email("Enter a valid email address."),
   password: z.string().min(8, "Password must be at least 8 characters."),
+});
+
+const forgotPasswordSchema = z.object({
+  email: z.email("Enter a valid email address."),
 });
 
 export async function loginAction(
@@ -95,6 +100,39 @@ export async function signupAction(
   }
 
   redirect("/login?message=Check%20your%20email%20to%20confirm%20your%20account.");
+}
+
+export async function forgotPasswordAction(
+  _prevState: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  const parsed = forgotPasswordSchema.safeParse({
+    email: formData.get("email"),
+  });
+
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? "Enter a valid email address.",
+    };
+  }
+
+  const headerStore = await headers();
+  const origin =
+    headerStore.get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+    redirectTo: `${origin}/reset-password`,
+  });
+
+  if (error) {
+    return {
+      error: error.message,
+    };
+  }
+
+  return {
+    success: "If that email is registered, a password reset link is on the way.",
+  };
 }
 
 export async function logoutAction() {
