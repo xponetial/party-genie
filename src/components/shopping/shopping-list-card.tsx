@@ -91,6 +91,65 @@ function truncateSearchQuery(value: string | null, maxLength = 72) {
   return `${value.slice(0, maxLength - 1).trimEnd()}...`;
 }
 
+function getCategoryVisualPath(category: string) {
+  const normalizedCategory = category.trim().toLowerCase();
+
+  if (
+    normalizedCategory.includes("beverage") ||
+    normalizedCategory.includes("drink") ||
+    normalizedCategory.includes("bar")
+  ) {
+    return "/shopping-categories/beverages.svg";
+  }
+
+  if (
+    normalizedCategory.includes("decor") ||
+    normalizedCategory.includes("floral") ||
+    normalizedCategory.includes("flower") ||
+    normalizedCategory.includes("centerpiece")
+  ) {
+    return "/shopping-categories/decor.svg";
+  }
+
+  if (
+    normalizedCategory.includes("table") ||
+    normalizedCategory.includes("serve") ||
+    normalizedCategory.includes("plate") ||
+    normalizedCategory.includes("utensil")
+  ) {
+    return "/shopping-categories/tableware.svg";
+  }
+
+  if (
+    normalizedCategory.includes("food") ||
+    normalizedCategory.includes("dessert") ||
+    normalizedCategory.includes("snack") ||
+    normalizedCategory.includes("cake")
+  ) {
+    return "/shopping-categories/food.svg";
+  }
+
+  if (
+    normalizedCategory.includes("host") ||
+    normalizedCategory.includes("setup") ||
+    normalizedCategory.includes("supply") ||
+    normalizedCategory.includes("essentials")
+  ) {
+    return "/shopping-categories/hosting.svg";
+  }
+
+  if (
+    normalizedCategory.includes("favor") ||
+    normalizedCategory.includes("activity") ||
+    normalizedCategory.includes("game") ||
+    normalizedCategory.includes("upgrade")
+  ) {
+    return "/shopping-categories/activities.svg";
+  }
+
+  return null;
+}
+
 function buildTrackedShoppingHref({
   eventId,
   item,
@@ -113,12 +172,22 @@ function buildTrackedShoppingHref({
 
 function buildRecommendationVisual(item: ShoppingItemDetails) {
   const categoryLabel = toTitleCase(item.category);
+  const categoryVisualPath = getCategoryVisualPath(item.category);
 
   if (item.image_url) {
     return (
       <div
         className="h-28 rounded-[1.35rem] bg-cover bg-center lg:h-full lg:min-h-40"
         style={{ backgroundImage: `url(${item.image_url})` }}
+      />
+    );
+  }
+
+  if (categoryVisualPath) {
+    return (
+      <div
+        className="h-28 rounded-[1.35rem] border border-white/70 bg-cover bg-center lg:h-full lg:min-h-40"
+        style={{ backgroundImage: `url(${categoryVisualPath})` }}
       />
     );
   }
