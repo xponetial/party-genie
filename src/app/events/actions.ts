@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { enforceAiLimits } from "@/lib/ai/limits";
-import { generatePlanForEvent, restorePlanVersionForEvent } from "@/lib/ai/workflows";
+import {
+  generatePlanForEvent,
+  replaceShoppingItemForEvent,
+  restorePlanVersionForEvent,
+} from "@/lib/ai/workflows";
 import { inviteDesignSchema } from "@/lib/invite-design";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createAuditLog, trackAnalyticsEvent } from "@/lib/telemetry";
@@ -91,6 +95,12 @@ const updateShoppingItemSchema = shoppingItemSchema.extend({
 });
 
 const deleteShoppingItemSchema = z.object({
+  eventId: z.string().uuid(),
+  shoppingListId: z.string().uuid(),
+  itemId: z.string().uuid(),
+});
+
+const replaceShoppingItemSchema = z.object({
   eventId: z.string().uuid(),
   shoppingListId: z.string().uuid(),
   itemId: z.string().uuid(),
@@ -674,6 +684,60 @@ export async function deleteShoppingItemAction(formData: FormData) {
 
   await supabase.from("shopping_items").delete().eq("id", parsed.data.itemId);
   await updateShoppingListEstimate(supabase, parsed.data.shoppingListId);
+
+  revalidatePath(`/events/${parsed.data.eventId}`);
+  revalidatePath(`/events/${parsed.data.eventId}/shopping`);
+  revalidatePath("/dashboard");
+}
+
+export async function replaceShoppingItemAction(formData: FormData) {
+  const { supabase, user } = await requireUser();
+  const parsed = replaceShoppingItemSchema.safeParse({
+    eventId: formData.get("eventId"),
+    shoppingListId: formData.get("shoppingListId"),
+    itemId: formData.get("itemId"),
+  });
+
+  if (!parsed.success) return;
+
+  const limit = await enforceAiLimits(supabase, {
+    userId: user.id,
+    eventId: parsed.data.eventId,
+    generationType: "shopping_list_transform",
+  });
+
+  if (!limit.allowed) {
+    return;
+  }
+
+  const result = await replaceShoppingItemForEvent(
+    supabase,
+    parsed.data.eventId,
+    parsed.data.itemId,
+  );
+
+  await Promise.all([
+    trackAnalyticsEvent(supabase, {
+      eventName: "shopping_pick_replaced",
+      userId: user.id,
+      eventId: parsed.data.eventId,
+      metadata: {
+        source: "replace_pick",
+        item_id: parsed.data.itemId,
+        replacement_name: result.itemName,
+      },
+    }),
+    createAuditLog(supabase, {
+      action: "shopping_item_replaced",
+      userId: user.id,
+      eventId: parsed.data.eventId,
+      metadata: {
+        item_id: parsed.data.itemId,
+        replacement_name: result.itemName,
+        estimated_total: result.estimatedTotal,
+      },
+    }),
+  ]);
 
   revalidatePath(`/events/${parsed.data.eventId}`);
   revalidatePath(`/events/${parsed.data.eventId}/shopping`);

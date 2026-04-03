@@ -90,6 +90,10 @@ type ShoppingGenerationContext = {
   }> | null;
 };
 
+type ShoppingReplacementContext = ShoppingGenerationContext & {
+  existingCategoryNames?: string[] | null;
+};
+
 const generatedTaskSchema = z.object({
   title: z.string().min(3),
   due_label: z.string().min(2),
@@ -251,6 +255,10 @@ function getBudgetTier(event: EventSeed) {
   }
 
   return "premium";
+}
+
+function toTitleCase(value: string) {
+  return value.replace(/[-_]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function buildAmazonSearchUrl(query: string) {
@@ -904,6 +912,221 @@ export async function generateShoppingList(event: EventSeed, context?: ShoppingG
       provider: generated.usage.provider,
       generatedAt: new Date().toISOString(),
       summary: "Generated using the OpenAI Responses API.",
+      model: generated.usage.model,
+      promptVersion: generated.usage.promptVersion,
+      usage: generated.usage,
+    },
+  };
+}
+
+function buildReplacementFallback(
+  event: EventSeed,
+  currentItem: {
+    category: string;
+    name: string;
+    quantity: number;
+  },
+  context?: ShoppingReplacementContext,
+) {
+  const blockedNames = new Set(
+    [currentItem.name, ...(context?.existingCategoryNames ?? [])].map((value) =>
+      value.trim().toLowerCase(),
+    ),
+  );
+
+  const fallbackMatch = getShoppingItems(event, context).find(
+    (item) =>
+      item.category.toLowerCase() === currentItem.category.toLowerCase() &&
+      !blockedNames.has(item.name.trim().toLowerCase()),
+  );
+
+  if (fallbackMatch) {
+    return fallbackMatch;
+  }
+
+  const theme = (context?.planTheme?.trim() || getTheme(event)).trim();
+  const category = currentItem.category.trim();
+  const normalizedCategory = category.toLowerCase();
+  const guestCount = getGuestCount(event);
+  const budgetTier = getBudgetTier(event);
+
+  if (normalizedCategory.includes("beverage") || normalizedCategory.includes("drink")) {
+    return normalizeAmazonRecommendation({
+      category,
+      name: "Self-serve drink garnish and ice add-on pack",
+      quantity: Math.max(1, Math.ceil(guestCount / 10)),
+      estimated_price: budgetTier === "lean" ? 10 : 16,
+      recommendation_reason:
+        "Gives the drink area a more complete feel without repeating the first beverage recommendation.",
+      search_query: `${theme} party drink garnish caddy ice bucket set`,
+      image_url: null,
+    });
+  }
+
+  if (normalizedCategory.includes("decor")) {
+    return normalizeAmazonRecommendation({
+      category,
+      name: "Accent lighting or tabletop styling bundle",
+      quantity: Math.max(1, Math.ceil(guestCount / 12)),
+      estimated_price: budgetTier === "lean" ? 16 : 24,
+      recommendation_reason:
+        "Offers a different decor angle so the setup feels layered instead of repeating the same type of piece.",
+      search_query: `${theme} party accent lighting centerpiece decor`,
+      image_url: null,
+    });
+  }
+
+  if (normalizedCategory.includes("table") || normalizedCategory.includes("serve")) {
+    return normalizeAmazonRecommendation({
+      category,
+      name: "Hosting extras for serving and cleanup",
+      quantity: Math.max(1, Math.ceil(guestCount / 14)),
+      estimated_price: budgetTier === "lean" ? 14 : 20,
+      recommendation_reason:
+        "Covers the host-side serving and reset details that usually get missed until the last minute.",
+      search_query: `${theme} party serving tray napkin caddy hosting set`,
+      image_url: null,
+    });
+  }
+
+  if (normalizedCategory.includes("food") || normalizedCategory.includes("dessert")) {
+    return normalizeAmazonRecommendation({
+      category,
+      name: "Serveware add-on for snacks or desserts",
+      quantity: Math.max(1, Math.ceil(guestCount / 16)),
+      estimated_price: budgetTier === "lean" ? 15 : 22,
+      recommendation_reason:
+        "Keeps the food setup flexible if you want another table moment without reworking the whole menu.",
+      search_query: `${theme} party dessert stand snack serveware`,
+      image_url: null,
+    });
+  }
+
+  return normalizeAmazonRecommendation({
+    category,
+    name: `${toTitleCase(category)} alternate host pick`,
+    quantity: Math.max(1, currentItem.quantity),
+    estimated_price: budgetTier === "lean" ? 12 : 18,
+    recommendation_reason:
+      "This alternate keeps the category covered while giving you a different shopping direction from the current pick.",
+    search_query: `${theme} ${category} party host recommendation`,
+    image_url: null,
+  });
+}
+
+export async function generateReplacementShoppingItem(
+  event: EventSeed,
+  currentItem: {
+    category: string;
+    name: string;
+    quantity: number;
+  },
+  context?: ShoppingReplacementContext,
+) {
+  const fallback = buildReplacementFallback(event, currentItem, context);
+  const contextLines = [
+    context?.planTheme ? `Saved plan theme: ${context.planTheme}` : null,
+    context?.menu?.length ? `Saved menu ideas: ${context.menu.join(", ")}` : null,
+    context?.shoppingCategories?.length
+      ? `Saved shopping category hints: ${context.shoppingCategories
+          .map((category) => `${category.category} (${category.items.map((item) => `${item.name} x${item.quantity}`).join(", ")})`)
+          .join("; ")}`
+      : null,
+    context?.existingCategoryNames?.length
+      ? `Existing picks already in this category: ${context.existingCategoryNames.join(", ")}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const generated = await generateStructuredObject({
+    generationType: "shopping_list_transform",
+    taskType: "lightweight",
+    systemPrompt:
+      "You replace one shopping recommendation for an event host. Return one stronger alternative in the same category. Avoid duplicates and keep the new pick realistic, Amazon-searchable, and specific to the event.",
+    userPrompt: `Replace one shopping recommendation for this event.\n${eventBrief(event)}${
+      contextLines ? `\n\nSaved planning context:\n${contextLines}` : ""
+    }\n\nCurrent item to replace:
+- Category: ${currentItem.category}
+- Name: ${currentItem.name}
+- Quantity: ${currentItem.quantity}
+
+Requirements:
+- Return exactly one replacement item in the same category.
+- The replacement must have a different name from the current item.
+- Do not repeat any existing picks already listed in this category.
+- Keep the quantity realistic for the guest count and event type.
+- Include recommendation_reason explaining why this alternate is a better fit.
+- Include search_query with the Amazon search phrase to use.
+- Use null for image_url if you do not know an exact image.
+- Set external_url to an Amazon search URL when possible.`,
+    schema: generatedShoppingItemSchema,
+  }).catch(() => null);
+
+  if (!generated) {
+    return {
+      item: fallback,
+      rawResponse: {
+        provider: "party-genie-structured-fallback",
+        generatedAt: new Date().toISOString(),
+        summary: `Replaced shopping item "${currentItem.name}" using the local fallback planner.`,
+        model: getOpenAIModel("lightweight"),
+        promptVersion: getPromptVersion("shopping_list_transform"),
+        usage: {
+          model: getOpenAIModel("lightweight"),
+          promptVersion: getPromptVersion("shopping_list_transform"),
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          estimatedCostUsd: 0,
+          latencyMs: 0,
+          provider: "party-genie-structured-fallback",
+          usedFallback: true,
+        },
+      },
+    };
+  }
+
+  const normalizedItem = normalizeAmazonRecommendation({
+    ...generated.data,
+    category: currentItem.category,
+  });
+  const blockedNames = new Set(
+    [currentItem.name, ...(context?.existingCategoryNames ?? [])].map((value) =>
+      value.trim().toLowerCase(),
+    ),
+  );
+
+  if (blockedNames.has(normalizedItem.name.trim().toLowerCase())) {
+    return {
+      item: fallback,
+      rawResponse: {
+        provider: "party-genie-structured-fallback",
+        generatedAt: new Date().toISOString(),
+        summary: `Used fallback because the generated replacement matched an existing pick for "${currentItem.name}".`,
+        model: getOpenAIModel("lightweight"),
+        promptVersion: getPromptVersion("shopping_list_transform"),
+        usage: {
+          model: getOpenAIModel("lightweight"),
+          promptVersion: getPromptVersion("shopping_list_transform"),
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          estimatedCostUsd: 0,
+          latencyMs: 0,
+          provider: "party-genie-structured-fallback",
+          usedFallback: true,
+        },
+      },
+    };
+  }
+
+  return {
+    item: normalizedItem,
+    rawResponse: {
+      provider: generated.usage.provider,
+      generatedAt: new Date().toISOString(),
+      summary: `Replaced shopping item "${currentItem.name}" with a fresh recommendation.`,
       model: generated.usage.model,
       promptVersion: generated.usage.promptVersion,
       usage: generated.usage,
