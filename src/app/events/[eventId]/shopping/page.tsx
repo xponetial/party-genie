@@ -8,15 +8,21 @@ export default async function EventShoppingPage({
   params: Promise<{ eventId: string }>;
 }) {
   const { eventId } = await params;
-  const { shoppingList, shoppingItems } = await getEventContext(eventId);
+  const { event, plan, shoppingList, shoppingItems } = await getEventContext(eventId);
 
   return (
     <AppShell
-      title="Shopping cart"
-      description="Review the AI-generated cart, compare retailers, and keep the order aligned to budget."
+      title="Party Genie Shopping"
+      description="Personalized shopping recommendations based on the event details you already planned."
       backHref={`/events/${eventId}`}
     >
-      <ShoppingListCard eventId={eventId} shoppingList={shoppingList} items={shoppingItems} />
+      <ShoppingListCard
+        event={event}
+        eventId={eventId}
+        items={shoppingItems}
+        plan={plan}
+        shoppingList={shoppingList}
+      />
     </AppShell>
   );
 }
