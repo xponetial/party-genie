@@ -300,7 +300,7 @@ export async function createEventAction(formData: FormData) {
   }
 
   revalidatePath("/dashboard");
-  redirect(`/events/${event.id}`);
+  redirect(`/events/${event.id}/invite`);
 }
 
 export async function saveInviteAction(formData: FormData) {
