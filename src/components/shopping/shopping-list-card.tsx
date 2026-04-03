@@ -85,20 +85,26 @@ function summarizeCategory(itemCount: number, category: string) {
   return `${itemCount} ${label.toLowerCase()} picks`;
 }
 
+function truncateSearchQuery(value: string | null, maxLength = 72) {
+  if (!value) return null;
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1).trimEnd()}...`;
+}
+
 function buildRecommendationVisual(item: ShoppingItemDetails) {
   const categoryLabel = toTitleCase(item.category);
 
   if (item.image_url) {
     return (
       <div
-        className="h-32 rounded-[1.35rem] bg-cover bg-center"
+        className="h-28 rounded-[1.35rem] bg-cover bg-center md:h-full md:min-h-40"
         style={{ backgroundImage: `url(${item.image_url})` }}
       />
     );
   }
 
   return (
-    <div className="flex h-32 items-end rounded-[1.35rem] border border-white/70 bg-[linear-gradient(145deg,rgba(37,146,255,0.22)_0%,rgba(118,97,255,0.18)_45%,rgba(255,255,255,0.94)_100%)] p-4">
+    <div className="flex h-28 items-end rounded-[1.35rem] border border-white/70 bg-[linear-gradient(145deg,rgba(37,146,255,0.22)_0%,rgba(118,97,255,0.18)_45%,rgba(255,255,255,0.94)_100%)] p-4 md:h-full md:min-h-40">
       <div>
         <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Amazon search pick</p>
         <p className="mt-2 text-lg font-semibold text-ink">{categoryLabel}</p>
@@ -227,7 +233,7 @@ export function ShoppingListCard({
 
       <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <Card className="bg-[rgba(244,247,255,0.9)]">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Recommendation groups</p>
               <h3 className="mt-2 text-2xl font-semibold text-ink">
@@ -235,9 +241,9 @@ export function ShoppingListCard({
               </h3>
             </div>
             {shoppingList ? (
-              <p className="text-sm font-medium text-brand">
+              <div className="self-start rounded-full border border-border bg-white/85 px-4 py-2 text-sm font-medium text-brand">
                 Current estimate: {formatMoney(shoppingList.estimated_total)}
-              </p>
+              </div>
             ) : null}
           </div>
 
@@ -261,41 +267,47 @@ export function ShoppingListCard({
                         key={item.id}
                         className="rounded-[1.5rem] border border-border bg-[linear-gradient(135deg,rgba(255,255,255,0.96)_0%,rgba(244,247,255,0.92)_100%)] p-4"
                       >
-                        <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+                        <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
                           {buildRecommendationVisual(item)}
 
-                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                            <div className="max-w-2xl">
-                            <p className="text-lg font-semibold text-ink">{item.name}</p>
-                            <p className="mt-2 text-sm leading-6 text-ink-muted">
-                              {buildRecommendationReason(item, event, plan)}
-                            </p>
-                            <div className="mt-3 flex flex-wrap gap-2 text-xs uppercase tracking-[0.18em] text-ink-muted">
-                              <span className="rounded-full bg-white px-3 py-2">Qty {item.quantity}</span>
-                              <span className="rounded-full bg-white px-3 py-2">
-                                {formatMoney(item.estimated_price)}
-                              </span>
-                              <span className="rounded-full bg-white px-3 py-2">{item.status}</span>
-                              {item.search_query ? (
-                                <span className="rounded-full bg-white px-3 py-2 normal-case tracking-normal">
-                                  Amazon search: {item.search_query}
-                                </span>
-                              ) : null}
-                            </div>
-                          </div>
+                          <div className="flex min-w-0 flex-col justify-between gap-4">
+                            <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                              <div className="min-w-0 max-w-2xl">
+                                <p className="text-xl font-semibold leading-8 text-ink">{item.name}</p>
+                                <p className="mt-2 max-w-xl text-sm leading-7 text-ink-muted">
+                                  {buildRecommendationReason(item, event, plan)}
+                                </p>
+                                <div className="mt-4 flex flex-wrap gap-2 text-xs uppercase tracking-[0.18em] text-ink-muted">
+                                  <span className="rounded-full bg-white px-3 py-2">Qty {item.quantity}</span>
+                                  <span className="rounded-full bg-white px-3 py-2">
+                                    {formatMoney(item.estimated_price)}
+                                  </span>
+                                  <span className="rounded-full bg-white px-3 py-2">{item.status}</span>
+                                </div>
+                              </div>
 
-                            <div className="flex flex-wrap gap-3 lg:justify-end">
-                            {item.external_url ? (
-                              <Button asChild>
-                                <a href={item.external_url} rel="noreferrer" target="_blank">
-                                  View on Amazon
-                                </a>
-                              </Button>
+                              <div className="flex shrink-0 flex-wrap gap-3 xl:justify-end">
+                                {item.external_url ? (
+                                  <Button asChild>
+                                    <a href={item.external_url} rel="noreferrer" target="_blank">
+                                      View on Amazon
+                                    </a>
+                                  </Button>
+                                ) : null}
+                                <Button asChild variant="secondary">
+                                  <Link href={`#manual-item-${item.id}`}>Adjust details</Link>
+                                </Button>
+                              </div>
+                            </div>
+
+                            {item.search_query ? (
+                              <div className="rounded-[1.1rem] border border-border bg-white/80 px-4 py-3 text-sm text-ink-muted">
+                                <span className="mr-2 text-xs uppercase tracking-[0.18em] text-ink-muted">
+                                  Amazon search
+                                </span>
+                                {truncateSearchQuery(item.search_query)}
+                              </div>
                             ) : null}
-                            <Button asChild variant="secondary">
-                              <Link href={`#manual-item-${item.id}`}>Adjust details</Link>
-                            </Button>
-                          </div>
                           </div>
                         </div>
                       </div>
