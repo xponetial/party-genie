@@ -70,6 +70,20 @@ function compactCopy(value: string, maxLength: number) {
   return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
+function getTitleFontSize(title: string) {
+  const length = title.trim().length;
+
+  if (length > 34) {
+    return 54;
+  }
+
+  if (length > 24) {
+    return 62;
+  }
+
+  return 72;
+}
+
 function getImageMimeType(assetPath: string) {
   const extension = path.extname(assetPath).toLowerCase();
 
@@ -120,6 +134,7 @@ export async function createInviteCardImageResponse(invite: PublicInviteImageRec
   const template = resolveTemplate(templateCategories, design, invite.event_type);
   const backgroundUrl = template ? await getTemplateBackgroundDataUri(template.assetPath) : null;
   const message = compactCopy(design.fields.messageText, 360);
+  const titleFontSize = getTitleFontSize(design.fields.title);
 
   return new ImageResponse(
     (
@@ -174,7 +189,7 @@ export async function createInviteCardImageResponse(invite: PublicInviteImageRec
           <div
             style={{
               background:
-                "linear-gradient(180deg, rgba(5,10,35,0.12) 0%, rgba(9,15,46,0.16) 44%, rgba(6,10,30,0.4) 100%)",
+                "linear-gradient(180deg, rgba(4,8,28,0.28) 0%, rgba(7,12,34,0.18) 24%, rgba(8,12,36,0.12) 42%, rgba(6,10,30,0.48) 100%)",
               inset: 0,
               position: "absolute",
             }}
@@ -204,8 +219,8 @@ export async function createInviteCardImageResponse(invite: PublicInviteImageRec
               <div
                 style={{
                   alignItems: "center",
-                  background: "rgba(8,12,36,0.66)",
-                  border: "1px solid rgba(255,255,255,0.14)",
+                  background: "rgba(8,12,36,0.76)",
+                  border: "1px solid rgba(255,255,255,0.18)",
                   borderRadius: 999,
                   display: "flex",
                   fontSize: 17,
@@ -222,10 +237,15 @@ export async function createInviteCardImageResponse(invite: PublicInviteImageRec
               </div>
               <div
                 style={{
-                  fontSize: 26,
+                  background: "rgba(8,12,36,0.52)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: 999,
+                  fontSize: 24,
                   fontWeight: 700,
-                  letterSpacing: "0.34em",
-                  opacity: 0.92,
+                  letterSpacing: "0.22em",
+                  margin: "0 auto",
+                  maxWidth: "92%",
+                  padding: "12px 22px",
                   textTransform: "uppercase",
                 }}
               >
@@ -233,11 +253,17 @@ export async function createInviteCardImageResponse(invite: PublicInviteImageRec
               </div>
               <div
                 style={{
+                  background: "linear-gradient(180deg, rgba(6,10,30,0.52) 0%, rgba(6,10,30,0.36) 100%)",
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  borderRadius: 30,
                   fontFamily: "Georgia, serif",
-                  fontSize: 72,
+                  fontSize: titleFontSize,
                   fontWeight: 700,
                   letterSpacing: "0.04em",
                   lineHeight: 1.04,
+                  marginTop: 18,
+                  maxWidth: "100%",
+                  padding: "22px 28px",
                   whiteSpace: "pre-wrap",
                 }}
               >
@@ -248,15 +274,15 @@ export async function createInviteCardImageResponse(invite: PublicInviteImageRec
             <div
               style={{
                 background: "rgba(8, 12, 36, 0.48)",
-                border: "1px solid rgba(255,255,255,0.16)",
+                border: "1px solid rgba(255,255,255,0.18)",
                 borderRadius: 34,
                 color: "#fffdf9",
                 display: "flex",
                 flexDirection: "column",
-                fontSize: 24,
-                lineHeight: 1.5,
+                fontSize: 22,
+                lineHeight: 1.45,
                 marginTop: 480,
-                padding: "34px 38px",
+                padding: "28px 32px",
                 textAlign: "center",
                 width: "100%",
               }}
