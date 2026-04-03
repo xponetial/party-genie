@@ -29,6 +29,7 @@ Required for Supabase-backed auth and data:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 ```
 
 Optional for real AI generation:
@@ -49,7 +50,7 @@ RESEND_API_KEY=your_resend_api_key
 RESEND_FROM_EMAIL="AI Party Genie <onboarding@resend.dev>"
 ```
 
-For production sending, replace `onboarding@resend.dev` with a verified sender in Resend.
+For production sending, replace `onboarding@resend.dev` with a verified sender in Resend. Invite email previews are uploaded to a public Supabase Storage bucket, so email delivery also requires `SUPABASE_SERVICE_ROLE_KEY`.
 
 3. Start the app:
 

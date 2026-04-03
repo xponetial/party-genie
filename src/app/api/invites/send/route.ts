@@ -8,6 +8,7 @@ import {
   buildReminderEmailSubject,
 } from "@/lib/email/invite-template";
 import { normalizeInviteDesignData, type InviteDesignData } from "@/lib/invite-design";
+import { uploadInvitePreviewImage } from "@/lib/invite-preview-storage";
 import { getInviteFromEmail, getResendClient } from "@/lib/email/resend";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createAuditLog, trackAnalyticsEvent } from "@/lib/telemetry";
@@ -172,7 +173,33 @@ export async function POST(request: Request) {
     ? normalizeInviteDesignData(invite.design_json, fallbackDesign)
     : fallbackDesign;
   const inviteCopy = inviteDesign.fields.messageText;
-  const cardImageUrl = `${baseUrl}/api/invites/card-image/${invite.public_slug}`;
+  let cardImageUrl: string;
+
+  try {
+    const uploadResult = await uploadInvitePreviewImage({
+      eventId,
+      inviteId: invite.id,
+      invite: {
+        title: event.title,
+        event_type: event.event_type,
+        event_date: event.event_date,
+        location: event.location,
+        theme: null,
+        invite_copy: invite.invite_copy,
+        design_json: invite.design_json,
+      },
+    });
+
+    cardImageUrl = uploadResult.publicUrl;
+  } catch (error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        message: error instanceof Error ? error.message : "Invite preview image upload failed.",
+      },
+      { status: 500 },
+    );
+  }
 
   const sendResults = await Promise.all(
     sendableGuests.map(async (guest) => {
