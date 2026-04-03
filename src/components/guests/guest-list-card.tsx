@@ -308,11 +308,11 @@ export function GuestListCard({
         </div>
         <div className="mt-6 rounded-3xl border border-border bg-white/85 p-4">
           <p className="text-sm leading-6 text-ink-muted">
-            Need to fine-tune the visual invite first? You can jump back to the invitation
-            generator any time before sending.
+            Guest details are in place. Continue to shopping recommendations to review items,
+            retailer options, and estimated spend.
           </p>
           <Button asChild className="mt-3">
-            <Link href={`/events/${eventId}/invite`}>Back to invitation generator</Link>
+            <Link href={`/events/${eventId}/shopping`}>Next Shopping Recomendations</Link>
           </Button>
         </div>
       </Card>
