@@ -42,7 +42,7 @@ export async function AppShell({
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:px-8">
-      <aside className="hidden w-72 shrink-0 flex-col rounded-[2rem] border border-white/70 bg-[linear-gradient(180deg,rgba(247,213,255,0.82)_0%,rgba(236,225,255,0.78)_30%,rgba(223,237,255,0.82)_68%,rgba(206,229,255,0.88)_100%)] p-5 shadow-party backdrop-blur lg:flex">
+      <aside className="hidden w-72 shrink-0 flex-col rounded-[2rem] border border-white/75 bg-[linear-gradient(180deg,rgba(255,224,244,0.9)_0%,rgba(245,222,255,0.84)_28%,rgba(228,236,255,0.84)_62%,rgba(210,236,255,0.9)_100%)] p-5 shadow-party backdrop-blur lg:flex">
         <div className="rounded-3xl bg-white/30 p-4">
           <BrandLockup
             imageWidth={210}
@@ -68,13 +68,13 @@ export async function AppShell({
           <p className="text-sm uppercase tracking-[0.18em] text-white/70">AI host operating system</p>
           <p className="mt-2 text-lg font-semibold">Plan, invite, track, and execute</p>
           <p className="mt-2 text-sm leading-6 text-white/85">
-            The workspace now carries the Party Genie brand through the shell so every flow feels connected.
+            The workspace now carries the AI Party Genie brand through the shell so every flow feels connected.
           </p>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col gap-6">
-        <header className="rounded-[2rem] border border-white/70 bg-canvas px-6 py-5 shadow-party backdrop-blur">
+        <header className="rounded-[2rem] border border-white/75 bg-[linear-gradient(135deg,rgba(255,248,255,0.9)_0%,rgba(243,233,255,0.88)_38%,rgba(236,245,255,0.9)_74%,rgba(255,247,226,0.82)_100%)] px-6 py-5 shadow-party backdrop-blur">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
               {backHref ? (
@@ -85,7 +85,7 @@ export async function AppShell({
                   </Link>
                 </Button>
               ) : null}
-              <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Party Genie workspace</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">AI Party Genie workspace</p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight text-ink">{title}</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-muted">{description}</p>
             </div>

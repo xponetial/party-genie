@@ -76,7 +76,7 @@ export function InviteCardCanvas({
       <Image alt={alt} className="object-cover" fill sizes={`${maxWidth}px`} src={template.assetPath} />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,10,30,0.12)_0%,rgba(14,19,60,0.06)_30%,rgba(8,12,36,0.34)_100%)]" />
       <div className="absolute inset-x-5 top-5 rounded-full border border-white/15 bg-[#080c24]/70 px-4 py-2 text-center text-[0.58rem] font-semibold uppercase tracking-[0.34em] text-white/80 backdrop-blur-md">
-        Party Genie
+        AI Party Genie
       </div>
 
       <div

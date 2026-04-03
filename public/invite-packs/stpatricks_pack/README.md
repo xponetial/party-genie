@@ -1,1 +1,1 @@
-Party Genie St. Patrick's Day Pack - 3 templates, 1024x1536, no text, Codex ready.
+AI Party Genie St. Patrick's Day Pack - 3 templates, 1024x1536, no text, Codex ready.

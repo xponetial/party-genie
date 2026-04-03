@@ -238,7 +238,7 @@ export async function GET(
                   width: 260,
                 }}
               >
-                Party Genie
+                AI Party Genie
               </div>
               <div
                 style={{

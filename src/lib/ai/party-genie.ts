@@ -558,7 +558,7 @@ export async function generatePartyPlan(event: EventSeed): Promise<GeneratedPart
     generationType: "party_plan",
     taskType: "plan",
     systemPrompt:
-      "You are PartyGenie, an event planning assistant. Create practical host-ready party plans that are realistic, concise, and easy to execute.",
+      "You are AI Party Genie, an event planning assistant. Create practical host-ready party plans that are realistic, concise, and easy to execute.",
     userPrompt: `Create a complete event plan for this brief.\n${eventBrief(event)}\n\nRequirements:
 - Keep the plan aligned to the event type, budget, and guest count.
 - Return 3 to 5 menu items.

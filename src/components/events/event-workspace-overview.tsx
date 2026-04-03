@@ -116,7 +116,7 @@ export function EventWorkspaceOverview({
           <div className="mt-5 rounded-[1.75rem] border border-border bg-white/85 p-4">
             <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">AI revision</p>
             <p className="mt-2 text-sm leading-6 text-ink-muted">
-              Keep the current event structure, but ask PartyGenie to revise the plan around one
+              Keep the current event structure, but ask AI Party Genie to revise the plan around one
               specific change.
             </p>
             <div className="mt-4">

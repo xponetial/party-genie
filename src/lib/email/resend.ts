@@ -11,5 +11,5 @@ export function getResendClient() {
 }
 
 export function getInviteFromEmail() {
-  return process.env.RESEND_FROM_EMAIL?.trim() || "PartyGenie <onboarding@resend.dev>";
+  return process.env.RESEND_FROM_EMAIL?.trim() || "AI Party Genie <onboarding@resend.dev>";
 }

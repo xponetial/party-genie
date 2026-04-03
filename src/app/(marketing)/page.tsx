@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowRight,
   CalendarClock,
@@ -8,6 +9,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { ShellFrame } from "@/components/layout/shell-frame";
+import { DashboardPreviewButton } from "@/components/marketing/dashboard-preview-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -32,7 +34,23 @@ const highlights = [
 
 export default function MarketingHomePage() {
   return (
-    <ShellFrame>
+    <ShellFrame
+      brandVisual={
+        <Link
+          href="/"
+          className="block overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#080c24] shadow-[0_24px_70px_rgba(7,11,34,0.32)]"
+        >
+          <Image
+            src="/ai-party-genie-banner.png"
+            alt="AI Party Genie celebration banner"
+            width={1120}
+            height={768}
+            priority
+            className="h-auto w-full max-w-[520px] object-cover"
+          />
+        </Link>
+      }
+    >
       <section className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
         <div className="space-y-6 rounded-[2rem] border border-white/70 bg-[linear-gradient(135deg,rgba(245,223,255,0.34)_0%,rgba(237,243,255,0.94)_56%,rgba(228,239,255,0.98)_100%)] p-6 shadow-party">
           <Badge>Welcome and onboarding</Badge>
@@ -41,7 +59,7 @@ export default function MarketingHomePage() {
               Turn a party idea into a full plan, invite, shopping list, and timeline in one guided flow.
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-ink-muted">
-              PartyGenie is the AI planning workspace for hosts who want setup, invites, commerce,
+              AI Party Genie is the AI planning workspace for hosts who want setup, invites, commerce,
               and event-day execution to live in the same product.
             </p>
           </div>
@@ -52,9 +70,7 @@ export default function MarketingHomePage() {
                 <ArrowRight className="size-4" />
               </Link>
             </Button>
-            <Button asChild variant="secondary" size="lg">
-              <Link href="/dashboard">Preview the host dashboard</Link>
-            </Button>
+            <DashboardPreviewButton />
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <Card className="bg-[rgba(255,255,255,0.42)]">

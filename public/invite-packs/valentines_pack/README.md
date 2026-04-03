@@ -1,4 +1,4 @@
-Party Genie Valentine's Day Pack
+AI Party Genie Valentine's Day Pack
 
 Contents:
 - 3 individual PNG templates extracted from the approved 3-panel source

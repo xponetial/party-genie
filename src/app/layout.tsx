@@ -14,12 +14,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PartyGenie",
+  title: "AI Party Genie",
   description: "AI-powered party planning, invitations, guests, shopping, and tasks in one dashboard.",
   icons: {
-    icon: [{ url: "/icon.png", type: "image/png", sizes: "512x512" }],
-    apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }],
-    shortcut: ["/icon.png"],
+    icon: [{ url: "/ai-party-genie-logo.png?v=20260402", type: "image/png", sizes: "768x768" }],
+    apple: [{ url: "/ai-party-genie-logo.png?v=20260402", type: "image/png", sizes: "768x768" }],
+    shortcut: ["/ai-party-genie-logo.png?v=20260402"],
   },
 };
 
