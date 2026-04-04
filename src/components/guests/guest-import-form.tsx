@@ -38,12 +38,25 @@ export function GuestImportForm({ eventId }: { eventId: string }) {
           </p>
         ) : null}
         {state.success ? (
-          <p
+          <div
             className="rounded-2xl border border-accent/20 bg-accent-soft px-4 py-3 text-sm text-accent"
             aria-live="polite"
           >
-            {state.success}
-          </p>
+            <p>{state.success}</p>
+            {state.skippedCount ? (
+              <div className="mt-3 space-y-2 text-sm text-ink-muted">
+                <p className="font-medium text-ink">Rows to fix in the CSV:</p>
+                <ul className="space-y-1">
+                  {(state.rowErrors ?? []).slice(0, 5).map((rowError) => (
+                    <li key={rowError}>{rowError}</li>
+                  ))}
+                </ul>
+                {state.rowErrors && state.rowErrors.length > 5 ? (
+                  <p>Plus {state.rowErrors.length - 5} more row issue(s).</p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </div>
       <div className="flex items-end">

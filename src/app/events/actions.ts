@@ -57,6 +57,8 @@ export type GuestImportActionState = {
   error?: string;
   success?: string;
   importedCount?: number;
+  skippedCount?: number;
+  rowErrors?: string[];
 };
 
 const updateGuestSchema = guestSchema.extend({
@@ -67,6 +69,18 @@ const updateGuestSchema = guestSchema.extend({
 const deleteGuestSchema = z.object({
   eventId: z.string().uuid(),
   guestId: z.string().uuid(),
+});
+
+export type BulkGuestActionState = {
+  error?: string;
+  success?: string;
+  affectedCount?: number;
+};
+
+const bulkGuestActionSchema = z.object({
+  eventId: z.string().uuid(),
+  guestIds: z.array(z.string().uuid()).min(1, "Select at least one guest."),
+  bulkActionType: z.enum(["confirmed", "pending", "declined", "delete"]),
 });
 
 const deleteEventSchema = z.object({
@@ -210,7 +224,10 @@ function parseGuestImportCsv(csvText: string) {
     throw new Error("Use the sample CSV template so the column headers match.");
   }
 
-  const rows = lines.slice(1).map((line, index) => {
+  const validRows: Array<z.infer<typeof bulkGuestRowSchema>> = [];
+  const rowErrors: string[] = [];
+
+  lines.slice(1).forEach((line, index) => {
     const values = parseCsvLine(line);
     const record = Object.fromEntries(headers.map((header, headerIndex) => [header, values[headerIndex] ?? ""]));
     const parsedRow = bulkGuestRowSchema.safeParse({
@@ -221,17 +238,21 @@ function parseGuestImportCsv(csvText: string) {
     });
 
     if (!parsedRow.success) {
-      throw new Error(`Row ${index + 2} is invalid. Check the name, email, and plus-one fields.`);
+      rowErrors.push(`Row ${index + 2}: check the name, email, and plus-one fields.`);
+      return;
     }
 
-    return parsedRow.data;
+    validRows.push(parsedRow.data);
   });
 
-  if (!rows.length) {
-    throw new Error("No guest rows were found in the uploaded CSV.");
+  if (!validRows.length) {
+    throw new Error("No valid guest rows were found in the uploaded CSV.");
   }
 
-  return rows;
+  return {
+    validRows,
+    rowErrors,
+  };
 }
 
 async function requireUser() {
@@ -551,9 +572,9 @@ export async function importGuestsAction(
     }
 
     const csvText = await file.text();
-    const guests = parseGuestImportCsv(csvText);
+    const { validRows, rowErrors } = parseGuestImportCsv(csvText);
     const { error } = await supabase.from("guests").insert(
-      guests.map((guest) => ({
+      validRows.map((guest) => ({
         event_id: eventId,
         name: guest.name,
         email: guest.email || null,
@@ -574,14 +595,96 @@ export async function importGuestsAction(
     revalidatePath("/dashboard");
 
     return {
-      success: `Imported ${guests.length} guest${guests.length === 1 ? "" : "s"}.`,
-      importedCount: guests.length,
+      success:
+        rowErrors.length > 0
+          ? `Imported ${validRows.length} guest${validRows.length === 1 ? "" : "s"} and skipped ${rowErrors.length} row${rowErrors.length === 1 ? "" : "s"}.`
+          : `Imported ${validRows.length} guest${validRows.length === 1 ? "" : "s"}.`,
+      importedCount: validRows.length,
+      skippedCount: rowErrors.length,
+      rowErrors,
     };
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Guest import failed.",
     };
   }
+}
+
+export async function bulkGuestAction(
+  _prevState: BulkGuestActionState,
+  formData: FormData,
+): Promise<BulkGuestActionState> {
+  const { supabase } = await requireUser();
+  const parsed = bulkGuestActionSchema.safeParse({
+    eventId: formData.get("eventId"),
+    guestIds: formData.getAll("guestIds"),
+    bulkActionType: formData.get("bulkActionType"),
+  });
+
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? "Select guests before applying a bulk action.",
+    };
+  }
+
+  const { eventId, guestIds, bulkActionType } = parsed.data;
+
+  if (bulkActionType === "delete") {
+    const { error } = await supabase.from("guests").delete().eq("event_id", eventId).in("id", guestIds);
+
+    if (error) {
+      return {
+        error: `Couldn't remove the selected guests yet. ${error.message}`,
+      };
+    }
+
+    revalidatePath(`/events/${eventId}`);
+    revalidatePath(`/events/${eventId}/guests`);
+    revalidatePath(`/events/${eventId}/invite`);
+    revalidatePath("/dashboard");
+
+    return {
+      success: `Removed ${guestIds.length} guest${guestIds.length === 1 ? "" : "s"}.`,
+      affectedCount: guestIds.length,
+    };
+  }
+
+  const updates: { status: "pending" | "confirmed" | "declined"; plus_one_count?: number } = {
+    status: bulkActionType,
+  };
+
+  if (bulkActionType !== "confirmed") {
+    updates.plus_one_count = 0;
+  }
+
+  const { error } = await supabase
+    .from("guests")
+    .update(updates)
+    .eq("event_id", eventId)
+    .in("id", guestIds);
+
+  if (error) {
+    return {
+      error: `Couldn't update the selected guests yet. ${error.message}`,
+    };
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath(`/events/${eventId}/guests`);
+  revalidatePath(`/events/${eventId}/invite`);
+  revalidatePath("/dashboard");
+
+  const actionLabel =
+    bulkActionType === "confirmed"
+      ? "Marked"
+      : bulkActionType === "declined"
+        ? "Declined"
+        : "Reset";
+
+  return {
+    success: `${actionLabel} ${guestIds.length} guest${guestIds.length === 1 ? "" : "s"}.`,
+    affectedCount: guestIds.length,
+  };
 }
 
 export async function updateGuestAction(formData: FormData) {

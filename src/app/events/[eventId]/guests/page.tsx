@@ -17,7 +17,13 @@ export default async function EventGuestsPage({
       backHref={`/events/${eventId}`}
       eventNav={{ eventId, eventTitle: event.title, active: "guests" }}
     >
-      <GuestListCard eventId={eventId} guests={guests} invite={invite} guestMessages={guestMessages} />
+      <GuestListCard
+        eventId={eventId}
+        guestTarget={event.guest_target}
+        guests={guests}
+        invite={invite}
+        guestMessages={guestMessages}
+      />
     </AppShell>
   );
 }
