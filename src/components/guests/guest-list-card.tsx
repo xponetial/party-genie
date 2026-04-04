@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import {
   addGuestAction,
   bulkGuestAction,
@@ -68,62 +68,62 @@ function getSectionTitle(section: GuestSection) {
   if (section === "accepted") return { title: "Accepted guests", detail: "See who is coming and how plus-ones affect your seat count." };
   if (section === "declined") return { title: "Declined guests", detail: "Keep declined guests separate so the active roster stays cleaner." };
   if (section === "activity") return { title: "Guest activity", detail: "Review invite delivery and RSVP movement without the roster taking over the page." };
-  return { title: "All guests", detail: "See the full roster, apply filters, and update guests in batches." };
+  return { title: "All guests", detail: "See the full roster, apply filters, and handle outreach from one place." };
 }
 
-function GuestStats({
+function SummaryStrip({
   guestTarget,
   guests,
-  emailableGuestCount,
-  acceptedCount,
-  pendingCount,
+  pendingInviteCount,
+  section,
 }: {
   guestTarget: number | null;
   guests: GuestDetails[];
-  emailableGuestCount: number;
-  acceptedCount: number;
-  pendingCount: number;
+  pendingInviteCount: number;
+  section: GuestSection;
 }) {
+  const confirmedSeats = guests
+    .filter((guest) => guest.status === "confirmed")
+    .reduce((sum, guest) => sum + 1 + guest.plus_one_count, 0);
   const projectedSeats = guests.reduce((sum, guest) => sum + 1 + guest.plus_one_count, 0);
-  const openPlusOnes = guests.reduce((sum, guest) => sum + guest.plus_one_count, 0);
-  const respondedCount = guests.filter((guest) => guest.status !== "pending").length;
-  const rsvpRate = guests.length ? Math.round((respondedCount / guests.length) * 100) : 0;
+  const acceptedCount = guests.filter((guest) => guest.status === "confirmed").length;
+  const pendingCount = guests.filter((guest) => guest.status === "pending").length;
+  const declinedCount = guests.filter((guest) => guest.status === "declined").length;
   const targetDelta = guestTarget == null ? null : guestTarget - projectedSeats;
+
+  const cards =
+    section === "activity"
+      ? [
+          { label: "Deliveries logged", value: String(pendingInviteCount + guests.filter((guest) => guest.last_contacted_at).length), detail: "Invite and reminder activity" },
+          { label: "Pending RSVP", value: String(pendingCount), detail: "Guests still waiting to respond" },
+          { label: "Accepted", value: String(acceptedCount), detail: "Confirmed attendees" },
+          { label: "Declined", value: String(declinedCount), detail: "Guests not attending" },
+        ]
+      : [
+          { label: "Guest count", value: String(guests.length), detail: "People currently on the roster" },
+          { label: "Pending RSVP", value: String(pendingCount), detail: "Guests still waiting to respond" },
+          { label: "Confirmed seats", value: String(confirmedSeats), detail: "Guests plus confirmed plus-ones" },
+          {
+            label: "Seat target",
+            value: guestTarget == null ? "Open" : String(guestTarget),
+            detail:
+              targetDelta == null
+                ? "Set a target to compare headcount"
+                : targetDelta >= 0
+                  ? `${targetDelta} seats still available`
+                  : `${Math.abs(targetDelta)} seats over target`,
+          },
+        ];
 
   return (
     <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <div className="rounded-3xl bg-canvas p-4">
-        <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Guest count</p>
-        <p className="mt-2 text-2xl font-semibold text-ink">{guests.length}</p>
-        <p className="mt-2 text-sm text-ink-muted">
-          {emailableGuestCount} guest{emailableGuestCount === 1 ? "" : "s"} ready for email.
-        </p>
-      </div>
-      <div className="rounded-3xl bg-canvas p-4">
-        <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Projected seats</p>
-        <p className="mt-2 text-2xl font-semibold text-ink">{projectedSeats}</p>
-        <p className="mt-2 text-sm text-ink-muted">
-          Includes {openPlusOnes} plus-one{openPlusOnes === 1 ? "" : "s"} across the roster.
-        </p>
-      </div>
-      <div className="rounded-3xl bg-canvas p-4">
-        <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">RSVP progress</p>
-        <p className="mt-2 text-2xl font-semibold text-ink">{rsvpRate}%</p>
-        <p className="mt-2 text-sm text-ink-muted">
-          {acceptedCount} confirmed, {pendingCount} still pending.
-        </p>
-      </div>
-      <div className="rounded-3xl bg-canvas p-4">
-        <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Seat target</p>
-        <p className="mt-2 text-2xl font-semibold text-ink">{guestTarget ?? "Open"}</p>
-        <p className="mt-2 text-sm text-ink-muted">
-          {targetDelta == null
-            ? "Set a guest target on the event to compare headcount."
-            : targetDelta >= 0
-              ? `${targetDelta} seat${targetDelta === 1 ? "" : "s"} still available.`
-              : `${Math.abs(targetDelta)} seat${Math.abs(targetDelta) === 1 ? "" : "s"} over target.`}
-        </p>
-      </div>
+      {cards.map((card) => (
+        <div key={card.label} className="rounded-3xl bg-canvas p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">{card.label}</p>
+          <p className="mt-2 text-2xl font-semibold text-ink">{card.value}</p>
+          <p className="mt-2 text-sm text-ink-muted">{card.detail}</p>
+        </div>
+      ))}
     </div>
   );
 }
@@ -195,14 +195,6 @@ function ActivitySection({
 
   return (
     <div className="mt-6 space-y-4">
-      <div className="rounded-[1.75rem] border border-border bg-white/80 p-5">
-        <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Delivery log</p>
-        <h3 className="mt-2 text-lg font-semibold text-ink">Every invite and reminder in one place</h3>
-        <p className="mt-2 text-sm leading-6 text-ink-muted">
-          This view keeps guest communication separate from the roster so you can review outreach cleanly.
-        </p>
-      </div>
-
       {guestMessages.length ? (
         <>
           {displayedGuestMessages.map((message) => (
@@ -221,9 +213,7 @@ function ActivitySection({
                   {message.sent_at ? new Date(message.sent_at).toLocaleString("en-US") : "Draft"}
                 </p>
               </div>
-              <p className="mt-3 text-sm leading-6 text-ink-muted">
-                {message.subject ?? "Invite email sent"}
-              </p>
+              <p className="mt-3 text-sm leading-6 text-ink-muted">{message.subject ?? "Invite email sent"}</p>
               {message.metadata?.send_mode ? (
                 <p className="mt-2 text-xs uppercase tracking-[0.18em] text-ink-muted">
                   {String(message.metadata.send_mode).replaceAll("_", " ")}
@@ -541,14 +531,7 @@ function RosterSection({
   );
 }
 
-function GuestSidebar({
-  eventId,
-  guestTarget,
-  guests,
-  invite,
-  guestMessages,
-  section,
-}: {
+export function GuestListCard(_: {
   eventId: string;
   guestTarget: number | null;
   guests: GuestDetails[];
@@ -556,135 +539,7 @@ function GuestSidebar({
   guestMessages: GuestMessageDetails[];
   section: GuestSection;
 }) {
-  const confirmedSeats = guests
-    .filter((guest) => guest.status === "confirmed")
-    .reduce((sum, guest) => sum + 1 + guest.plus_one_count, 0);
-  const projectedSeats = guests.reduce((sum, guest) => sum + 1 + guest.plus_one_count, 0);
-  const openPlusOnes = guests.reduce((sum, guest) => sum + guest.plus_one_count, 0);
-  const acceptedCount = guests.filter((guest) => guest.status === "confirmed").length;
-  const declinedCount = guests.filter((guest) => guest.status === "declined").length;
-  const pendingCount = guests.filter((guest) => guest.status === "pending").length;
-  const emailableGuestCount = guests.filter((guest) => Boolean(guest.email)).length;
-  const pendingInviteCount = guests.filter((guest) => Boolean(guest.email) && !guest.last_contacted_at).length;
-  const remindableGuestCount = guests.filter(
-    (guest) => Boolean(guest.email) && guest.status === "pending" && guest.last_contacted_at,
-  ).length;
-  const targetDelta = guestTarget == null ? null : guestTarget - projectedSeats;
-
-  return (
-    <Card className="bg-[rgba(244,247,255,0.9)]">
-      <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Guest activity</p>
-      <h3 className="mt-3 text-xl font-semibold text-ink">RSVP tracking and delivery state</h3>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-3xl bg-white/85 p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Accepted</p>
-          <p className="mt-2 text-2xl font-semibold text-ink">{acceptedCount}</p>
-        </div>
-        <div className="rounded-3xl bg-white/85 p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Pending</p>
-          <p className="mt-2 text-2xl font-semibold text-ink">{pendingCount}</p>
-        </div>
-        <div className="rounded-3xl bg-white/85 p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Declined</p>
-          <p className="mt-2 text-2xl font-semibold text-ink">{declinedCount}</p>
-        </div>
-        <div className="rounded-3xl bg-white/85 p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Confirmed seats</p>
-          <p className="mt-2 text-2xl font-semibold text-ink">{confirmedSeats}</p>
-        </div>
-      </div>
-
-      <div className="mt-4 rounded-3xl border border-border bg-white/85 p-4">
-        <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Seat planning</p>
-        <p className="mt-2 text-sm leading-6 text-ink-muted">
-          {guestTarget == null
-            ? `Projected seats are ${projectedSeats} with ${openPlusOnes} plus-one${openPlusOnes === 1 ? "" : "s"} currently on the roster.`
-            : targetDelta != null && targetDelta >= 0
-              ? `${projectedSeats} projected seats leaves ${targetDelta} seat${targetDelta === 1 ? "" : "s"} under the target.`
-              : `${projectedSeats} projected seats puts the event ${Math.abs(targetDelta ?? 0)} seat${Math.abs(targetDelta ?? 0) === 1 ? "" : "s"} over target.`}
-        </p>
-      </div>
-
-      <div className="mt-4 rounded-3xl border border-border bg-white/85 p-4">
-        <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Delivery readiness</p>
-        <p className="mt-2 text-sm leading-6 text-ink-muted">
-          {pendingInviteCount} guest{pendingInviteCount === 1 ? "" : "s"} are ready for a first invite, and{" "}
-          {remindableGuestCount} pending guest{remindableGuestCount === 1 ? "" : "s"} can be reminded.
-        </p>
-      </div>
-
-      {invite ? (
-        <div className="mt-5">
-          <InviteSendButton
-            eventId={eventId}
-            pendingInviteCount={pendingInviteCount}
-            remindableGuestCount={remindableGuestCount}
-            emailableGuestCount={emailableGuestCount}
-          />
-        </div>
-      ) : null}
-
-      <div className="mt-5 space-y-3">
-        {guests.length ? (
-          guests.slice(0, 3).map((guest) => (
-            <div key={guest.id} className="flex items-center justify-between rounded-3xl border border-border bg-white/85 px-4 py-3">
-              <div>
-                <p className="font-medium text-ink">{guest.name}</p>
-                <p className="text-sm text-ink-muted">{guest.email ?? guest.phone ?? "No contact yet"}</p>
-                <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">{formatDeliveryState(guest)}</p>
-              </div>
-              <span className="text-sm font-medium capitalize text-brand">{guest.status}</span>
-            </div>
-          ))
-        ) : (
-          <div className="rounded-3xl border border-border bg-white/85 p-4 text-sm text-ink-muted">
-            Add guests before sending the invite.
-          </div>
-        )}
-      </div>
-
-      <div className="mt-6 rounded-3xl border border-border bg-white/85 p-4">
-        <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Quick links</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button asChild variant={section === "activity" ? "primary" : "secondary"}>
-            <Link href={`/events/${eventId}/guests/activity`}>
-              {guestMessages.length} activity event{guestMessages.length === 1 ? "" : "s"}
-            </Link>
-          </Button>
-          <Button asChild variant={section === "add" ? "primary" : "secondary"}>
-            <Link href={`/events/${eventId}/guests/add`}>Add / Import guests</Link>
-          </Button>
-        </div>
-      </div>
-
-      <div className="mt-6 rounded-3xl border border-border bg-white/85 p-4">
-        <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Next step</p>
-        <p className="text-sm leading-6 text-ink-muted">
-          Guest details are in place. Continue to shopping recommendations to review items, retailer options, and estimated spend.
-        </p>
-        <Button asChild className="mt-3">
-          <Link href={`/events/${eventId}/shopping`}>Next Shopping Recomendations</Link>
-        </Button>
-      </div>
-    </Card>
-  );
-}
-
-export function GuestListCard({
-  eventId,
-  guestTarget,
-  guests,
-  invite,
-  guestMessages,
-  section,
-}: {
-  eventId: string;
-  guestTarget: number | null;
-  guests: GuestDetails[];
-  invite: InviteDetails | null;
-  guestMessages: GuestMessageDetails[];
-  section: GuestSection;
-}) {
+  const { eventId, guestTarget, guests, invite, guestMessages, section } = _;
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<GuestFilter>(getInitialFilter(section));
   const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
@@ -693,28 +548,34 @@ export function GuestListCard({
   const [visibleLogCount, setVisibleLogCount] = useState(INITIAL_VISIBLE_LOGS);
   const [bulkState, bulkFormAction] = useActionState(bulkGuestAction, initialBulkState);
 
-  const emailableGuestCount = guests.filter((guest) => Boolean(guest.email)).length;
-  const acceptedCount = guests.filter((guest) => guest.status === "confirmed").length;
-  const pendingCount = guests.filter((guest) => guest.status === "pending").length;
   const sectionTitle = getSectionTitle(section);
+  const emailableGuestCount = guests.filter((guest) => Boolean(guest.email)).length;
+  const pendingInviteCount = guests.filter((guest) => Boolean(guest.email) && !guest.last_contacted_at).length;
+  const remindableGuestCount = guests.filter(
+    (guest) => Boolean(guest.email) && guest.status === "pending" && guest.last_contacted_at,
+  ).length;
   const allowFilterChips = section === "all";
 
   const normalizedQuery = query.trim().toLowerCase();
-  const visibleGuests = guests.filter((guest) => {
-    const matchesQuery =
-      normalizedQuery.length === 0 ||
-      guest.name.toLowerCase().includes(normalizedQuery) ||
-      guest.email?.toLowerCase().includes(normalizedQuery) ||
-      guest.phone?.toLowerCase().includes(normalizedQuery);
+  const visibleGuests = useMemo(
+    () =>
+      guests.filter((guest) => {
+        const matchesQuery =
+          normalizedQuery.length === 0 ||
+          guest.name.toLowerCase().includes(normalizedQuery) ||
+          guest.email?.toLowerCase().includes(normalizedQuery) ||
+          guest.phone?.toLowerCase().includes(normalizedQuery);
 
-    const matchesFilter =
-      filter === "all" ||
-      guest.status === filter ||
-      (filter === "needsInvite" && Boolean(guest.email) && !guest.last_contacted_at) ||
-      (filter === "hasEmail" && Boolean(guest.email));
+        const matchesFilter =
+          filter === "all" ||
+          guest.status === filter ||
+          (filter === "needsInvite" && Boolean(guest.email) && !guest.last_contacted_at) ||
+          (filter === "hasEmail" && Boolean(guest.email));
 
-    return matchesQuery && matchesFilter;
-  });
+        return matchesQuery && matchesFilter;
+      }),
+    [filter, guests, normalizedQuery],
+  );
 
   function toggleExpanded(guestId: string) {
     setExpandedGuestIds((current) =>
@@ -723,7 +584,7 @@ export function GuestListCard({
   }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
+    <div className="grid gap-4">
       <Card>
         <div className="flex flex-col gap-3">
           <div>
@@ -758,13 +619,36 @@ export function GuestListCard({
           </div>
         </div>
 
-        <GuestStats
+        <SummaryStrip
           guestTarget={guestTarget}
           guests={guests}
-          emailableGuestCount={emailableGuestCount}
-          acceptedCount={acceptedCount}
-          pendingCount={pendingCount}
+          pendingInviteCount={pendingInviteCount}
+          section={section}
         />
+
+        {section === "all" || section === "pending" ? (
+          <div className="mt-6 rounded-[1.75rem] border border-border bg-white/80 p-5">
+            <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Invite actions</p>
+            <h3 className="mt-2 text-lg font-semibold text-ink">Keep outreach on the main guest screen</h3>
+            <p className="mt-2 text-sm leading-6 text-ink-muted">
+              Send pending invites, resend the full batch, or follow up with waiting guests without leaving guest management.
+            </p>
+            {invite ? (
+              <div className="mt-4">
+                <InviteSendButton
+                  eventId={eventId}
+                  pendingInviteCount={pendingInviteCount}
+                  remindableGuestCount={remindableGuestCount}
+                  emailableGuestCount={emailableGuestCount}
+                />
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl bg-canvas px-4 py-3 text-sm text-ink-muted">
+                Save the invite first so outreach actions can appear here.
+              </div>
+            )}
+          </div>
+        ) : null}
 
         {section === "add" ? <AddGuestSection eventId={eventId} /> : null}
         {section === "activity" ? (
@@ -794,16 +678,17 @@ export function GuestListCard({
             allowFilterChips={allowFilterChips}
           />
         ) : null}
-      </Card>
 
-      <GuestSidebar
-        eventId={eventId}
-        guestTarget={guestTarget}
-        guests={guests}
-        invite={invite}
-        guestMessages={guestMessages}
-        section={section}
-      />
+        <div className="mt-6 rounded-3xl border border-border bg-white/85 p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Next step</p>
+          <p className="text-sm leading-6 text-ink-muted">
+            Guest details are in place. Continue to shopping recommendations to review items, retailer options, and estimated spend.
+          </p>
+          <Button asChild className="mt-3">
+            <Link href={`/events/${eventId}/shopping`}>Next Shopping Recomendations</Link>
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }
