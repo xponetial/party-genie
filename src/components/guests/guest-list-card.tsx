@@ -594,8 +594,8 @@ export function GuestListCard(_: {
           </div>
           <div className="flex flex-wrap gap-2">
             {[
-              { href: `/events/${eventId}/guests`, label: "All guests", key: "all" as const },
               { href: `/events/${eventId}/guests/add`, label: "Add / Import", key: "add" as const },
+              { href: `/events/${eventId}/guests`, label: "All guests", key: "all" as const },
               { href: `/events/${eventId}/guests/pending`, label: "Pending", key: "pending" as const },
               { href: `/events/${eventId}/guests/accepted`, label: "Accepted", key: "accepted" as const },
               { href: `/events/${eventId}/guests/declined`, label: "Declined", key: "declined" as const },

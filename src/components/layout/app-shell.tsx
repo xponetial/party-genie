@@ -21,7 +21,7 @@ const sections = [
 const eventSections = [
   { key: "overview", href: "", label: "Overview" },
   { key: "invite", href: "/invite", label: "Invite" },
-  { key: "guests", href: "/guests", label: "Guests" },
+  { key: "guests", href: "/guests/add", label: "Guests" },
   { key: "shopping", href: "/shopping", label: "Shopping" },
   { key: "timeline", href: "/timeline", label: "Timeline" },
   { key: "settings", href: "/settings", label: "Settings" },

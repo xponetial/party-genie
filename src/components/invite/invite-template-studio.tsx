@@ -303,7 +303,7 @@ export function InviteTemplateStudio({
               status, and send the invite.
             </p>
             <Button asChild className="mt-3">
-              <Link href={`/events/${event.id}/guests`}>Next: Guest management</Link>
+              <Link href={`/events/${event.id}/guests/add`}>Next: Guest management</Link>
             </Button>
           </div>
         </form>

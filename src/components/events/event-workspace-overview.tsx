@@ -131,7 +131,7 @@ function getPrimaryStep({
 
   if (guests.length === 0) {
     return {
-      href: `/events/${eventId}/guests`,
+      href: `/events/${eventId}/guests/add`,
       label: "Add your guests",
       detail: "Bring in attendees so RSVP tracking and invite delivery can begin.",
       step: "Step 2 of 4",
@@ -157,7 +157,7 @@ function getPrimaryStep({
   }
 
   return {
-    href: `/events/${eventId}/guests`,
+    href: `/events/${eventId}/guests/add`,
     label: "Run the final host check",
     detail: "Review guests, shopping, and timing one last time before the event goes live.",
     step: "Ready to host",
@@ -207,7 +207,7 @@ export async function EventWorkspaceOverview({
       icon: Sparkles,
     },
     {
-      href: `/events/${eventId}/guests`,
+      href: `/events/${eventId}/guests/add`,
       label: "Guests",
       value: String(guests.length),
       detail: pendingGuests
@@ -240,7 +240,7 @@ export async function EventWorkspaceOverview({
       stat: invite?.sent_at ? "Invite delivered" : "Invite draft ready",
     },
     {
-      href: `/events/${eventId}/guests`,
+      href: `/events/${eventId}/guests/add`,
       eyebrow: "Step 2",
       label: "Guest management",
       detail: "Add attendees, track RSVPs, and handle outreach without leaving the event flow.",
