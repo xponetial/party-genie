@@ -32,7 +32,8 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isAuthPage =
     pathname === "/login" || pathname === "/signup" || pathname === "/forgot-password";
-  const isProtectedPage = pathname.startsWith("/dashboard") || pathname.startsWith("/events");
+  const isProtectedPage =
+    pathname.startsWith("/dashboard") || pathname.startsWith("/events") || pathname.startsWith("/admin");
 
   if (!user && isProtectedPage) {
     return NextResponse.redirect(new URL("/login", request.url));

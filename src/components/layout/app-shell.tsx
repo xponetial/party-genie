@@ -58,6 +58,17 @@ export async function AppShell({
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const { data: profile } = user
+    ? await supabase
+        .from("profiles")
+        .select("plan_tier")
+        .eq("id", user.id)
+        .maybeSingle<{ plan_tier: string | null }>()
+    : { data: null };
+  const visibleSections =
+    profile?.plan_tier === "admin"
+      ? [...sections, { href: "/admin", label: "Admin", icon: Sparkles }]
+      : sections;
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -70,7 +81,7 @@ export async function AppShell({
           />
         </div>
         <nav className="mt-6 space-y-2">
-          {sections.map((section) => (
+          {visibleSections.map((section) => (
             <Link
               key={section.href}
               href={section.href}
