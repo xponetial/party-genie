@@ -60,6 +60,7 @@ export type AiGenerationType =
   | "invitation_text"
   | "shopping_list_transform"
   | "social_campaign"
+  | "social_content_regeneration"
   | "premium_concierge";
 
 export type AiUsageMetadata = {
@@ -110,6 +111,14 @@ type SocialCampaignGenerationInput = {
   sourceEventType?: string | null;
   audienceHint?: string | null;
   objectiveHint?: string | null;
+};
+
+type SocialContentGenerationInput = {
+  theme: string;
+  channel: "tiktok" | "pinterest" | "instagram" | "email" | "landing_page";
+  audience: string;
+  objective: string;
+  notes?: string | null;
 };
 
 type GeneratedSocialContentItem = {
@@ -223,6 +232,7 @@ const PROMPT_VERSIONS: Record<AiGenerationType, string> = {
   invitation_text: "invitation-text-v2",
   shopping_list_transform: "shopping-list-v2",
   social_campaign: "social-campaign-v1",
+  social_content_regeneration: "social-content-regeneration-v1",
   premium_concierge: "premium-concierge-v1",
 };
 const MODEL_PRICING: Record<
@@ -436,6 +446,17 @@ function normalizeGeneratedSocialContentItems(
     (channel) =>
       itemByChannel.get(channel) ??
       buildSocialContentFallbackItem(channel, theme, brandProfile),
+  );
+}
+
+function normalizeSingleSocialContentItem(
+  item: GeneratedSocialContentItem | null,
+  input: SocialContentGenerationInput,
+  brandProfile: SocialBrandProfileContext,
+) {
+  return (
+    item ??
+    buildSocialContentFallbackItem(input.channel, input.theme, brandProfile)
   );
 }
 
@@ -1258,6 +1279,78 @@ Requirements:
   };
 }
 
+export async function generateSocialContentItem(
+  input: SocialContentGenerationInput,
+  brandProfile: SocialBrandProfileContext,
+) {
+  const generated = await generateStructuredObject({
+    generationType: "social_content_regeneration",
+    taskType: "lightweight",
+    systemPrompt:
+      "You are Party Genie's internal social media copy strategist. Generate one polished channel-native content draft that is practical, clear, review-ready, and aligned to the current brand voice.",
+    userPrompt: `Create one social content draft.
+
+Theme: ${normalizeSocialTheme(input.theme)}
+Channel: ${input.channel}
+Audience: ${input.audience}
+Objective: ${input.objective}
+Campaign notes: ${input.notes?.trim() || "None provided"}
+
+Brand profile:
+- Tone: ${brandProfile.tone}
+- Audience: ${brandProfile.audience}
+- Signature phrases: ${brandProfile.signaturePhrases}
+- CTA style: ${brandProfile.ctaStyle}
+- Focus metrics: ${brandProfile.focusMetrics}
+
+Requirements:
+- Return exactly one content item for the requested channel only.
+- Make the copy distinct and native to the channel.
+- Use Party Genie as an event-planning and affiliate-friendly brand.
+- Include title, formatDetail, copy, callToAction, hashtags, visualDirection, and publishOffsetDays.
+- Return JSON only.`,
+    schema: generatedSocialContentItemSchema,
+  }).catch(() => null);
+
+  if (!generated) {
+    const fallback = normalizeSingleSocialContentItem(null, input, brandProfile);
+
+    return {
+      item: fallback,
+      rawResponse: {
+        provider: "party-genie-social-fallback",
+        generatedAt: new Date().toISOString(),
+        summary: `Generated fallback ${input.channel} draft for ${normalizeSocialTheme(input.theme)}.`,
+        model: getOpenAIModel("lightweight"),
+        promptVersion: getPromptVersion("social_content_regeneration"),
+        usage: {
+          model: getOpenAIModel("lightweight"),
+          promptVersion: getPromptVersion("social_content_regeneration"),
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          estimatedCostUsd: 0,
+          latencyMs: 0,
+          provider: "party-genie-social-fallback",
+          usedFallback: true,
+        },
+      },
+    };
+  }
+
+  return {
+    item: normalizeSingleSocialContentItem(generated.data, input, brandProfile),
+    rawResponse: {
+      provider: generated.usage.provider,
+      generatedAt: new Date().toISOString(),
+      summary: `Regenerated ${input.channel} draft for ${normalizeSocialTheme(input.theme)}.`,
+      model: generated.usage.model,
+      promptVersion: generated.usage.promptVersion,
+      usage: generated.usage,
+    },
+  };
+}
+
 export async function revisePartyPlan({
   event,
   currentPlan,
@@ -1694,4 +1787,5 @@ export type {
   EventSeed,
   GeneratedShoppingItem,
   SocialCampaignGenerationInput,
+  SocialContentGenerationInput,
 };

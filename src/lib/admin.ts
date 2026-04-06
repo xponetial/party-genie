@@ -134,11 +134,13 @@ type SocialMediaCampaignRow = {
   theme: string;
   audience: string;
   objective: string;
-  status: "draft" | "in_review" | "approved" | "scheduled" | "published";
+  status: "draft" | "in_review" | "approved" | "scheduled" | "published" | "archived";
   priority: "low" | "medium" | "high";
   source_event_type: string | null;
   scheduled_week_of: string | null;
   notes: string;
+  generation_summary: string;
+  archived_at: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -150,12 +152,15 @@ type SocialMediaContentItemRow = {
   channel: "tiktok" | "pinterest" | "instagram" | "email" | "landing_page";
   title: string;
   format_detail: string;
-  status: "draft" | "in_review" | "approved" | "scheduled" | "published";
+  status: "draft" | "in_review" | "approved" | "scheduled" | "published" | "archived";
   publish_on: string | null;
   copy: string;
   call_to_action: string;
   hashtags: string;
   visual_direction: string;
+  image_prompt: string;
+  asset_notes: string;
+  reference_links: string;
   created_at: string;
   updated_at: string;
 };
@@ -430,12 +435,31 @@ export type AdminSocialMediaData = {
   };
   metrics: {
     campaigns: number;
+    archivedCampaigns: number;
     contentItems: number;
     scheduledItems: number;
     publishedItems: number;
     approvalQueue: number;
     postingGoalPerWeek: number;
   };
+  analytics: {
+    byStatus: Array<{ label: string; count: number }>;
+    byChannel: Array<{ label: string; count: number }>;
+    aiGenerations: {
+      requests: number;
+      estimatedCostUsd: number;
+      averageLatencyMs: number;
+      fallbackCount: number;
+    };
+  };
+  calendar: Array<{
+    id: string;
+    publishOn: string;
+    campaignTheme: string;
+    channel: SocialMediaContentItemRow["channel"];
+    title: string;
+    status: SocialMediaContentItemRow["status"];
+  }>;
   campaigns: Array<{
     id: string;
     theme: string;
@@ -446,6 +470,8 @@ export type AdminSocialMediaData = {
     sourceEventType: string | null;
     scheduledWeekOf: string | null;
     notes: string;
+    generationSummary: string;
+    archivedAt: string | null;
     createdAt: string;
     updatedAt: string;
     createdByEmail: string | null;
@@ -465,6 +491,9 @@ export type AdminSocialMediaData = {
     callToAction: string;
     hashtags: string;
     visualDirection: string;
+    imagePrompt: string;
+    assetNotes: string;
+    referenceLinks: string;
     updatedAt: string;
   }>;
 };
@@ -1379,6 +1408,7 @@ export async function getAdminSocialMediaData(): Promise<AdminSocialMediaData> {
     { data: brandProfile },
     { data: campaigns = [] },
     { data: contentItems = [] },
+    { data: socialAiRows = [] },
   ] = await Promise.all([
     listAuthUsers(),
     supabase.from("profiles").select("id, full_name, plan_tier, phone, created_at").returns<AdminProfile[]>(),
@@ -1389,16 +1419,23 @@ export async function getAdminSocialMediaData(): Promise<AdminSocialMediaData> {
       .maybeSingle<SocialMediaBrandProfileRow>(),
     supabase
       .from("social_media_campaigns")
-      .select("id, theme, audience, objective, status, priority, source_event_type, scheduled_week_of, notes, created_by, created_at, updated_at")
+      .select("id, theme, audience, objective, status, priority, source_event_type, scheduled_week_of, notes, generation_summary, archived_at, created_by, created_at, updated_at")
       .order("updated_at", { ascending: false })
-      .limit(12)
+      .limit(24)
       .returns<SocialMediaCampaignRow[]>(),
     supabase
       .from("social_media_content_items")
-      .select("id, campaign_id, channel, title, format_detail, status, publish_on, copy, call_to_action, hashtags, visual_direction, created_at, updated_at")
+      .select("id, campaign_id, channel, title, format_detail, status, publish_on, copy, call_to_action, hashtags, visual_direction, image_prompt, asset_notes, reference_links, created_at, updated_at")
       .order("updated_at", { ascending: false })
-      .limit(16)
+      .limit(64)
       .returns<SocialMediaContentItemRow[]>(),
+    supabase
+      .from("ai_generations")
+      .select("id, user_id, event_id, generation_type, model, status, estimated_cost_usd, latency_ms, input_tokens, output_tokens, cached_input_tokens, created_at")
+      .in("generation_type", ["social_campaign", "social_content_regeneration"])
+      .order("created_at", { ascending: false })
+      .limit(50)
+      .returns<AiGenerationRow[]>(),
   ]);
 
   const authByUser = new Map(authUsers.map((user) => [user.id, user] as const));
@@ -1426,6 +1463,32 @@ export async function getAdminSocialMediaData(): Promise<AdminSocialMediaData> {
   const resolvedProfile = brandProfile ?? fallbackProfile;
   const allCampaigns = campaigns ?? [];
   const allContentItems = contentItems ?? [];
+  const activeCampaigns = allCampaigns.filter((campaign) => campaign.status !== "archived");
+  const activeContentItems = allContentItems.filter((item) => item.status !== "archived");
+  const byStatus = [...activeContentItems.reduce<Map<string, number>>((map, item) => {
+    map.set(item.status, (map.get(item.status) ?? 0) + 1);
+    return map;
+  }, new Map()).entries()].map(([label, count]) => ({ label, count }));
+  const byChannel = [...activeContentItems.reduce<Map<string, number>>((map, item) => {
+    map.set(item.channel, (map.get(item.channel) ?? 0) + 1);
+    return map;
+  }, new Map()).entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+  const aiRows = socialAiRows ?? [];
+  const aiLatencyRows = aiRows.filter((row) => row.latency_ms != null);
+  const calendar = activeContentItems
+    .filter((item) => item.publish_on)
+    .sort((a, b) => new Date(a.publish_on ?? "").getTime() - new Date(b.publish_on ?? "").getTime())
+    .slice(0, 12)
+    .map((item) => ({
+      id: item.id,
+      publishOn: item.publish_on ?? "",
+      campaignTheme: campaignById.get(item.campaign_id)?.theme ?? "Campaign",
+      channel: item.channel,
+      title: item.title,
+      status: item.status,
+    }));
 
   return {
     brandProfile: {
@@ -1441,13 +1504,29 @@ export async function getAdminSocialMediaData(): Promise<AdminSocialMediaData> {
       updatedByName: resolvedProfile.updated_by ? profileByUser.get(resolvedProfile.updated_by)?.full_name ?? null : null,
     },
     metrics: {
-      campaigns: allCampaigns.length,
-      contentItems: allContentItems.length,
-      scheduledItems: allContentItems.filter((item) => item.status === "scheduled").length,
-      publishedItems: allContentItems.filter((item) => item.status === "published").length,
-      approvalQueue: allCampaigns.filter((item) => item.status === "in_review").length,
+      campaigns: activeCampaigns.length,
+      archivedCampaigns: allCampaigns.filter((item) => item.status === "archived").length,
+      contentItems: activeContentItems.length,
+      scheduledItems: activeContentItems.filter((item) => item.status === "scheduled").length,
+      publishedItems: activeContentItems.filter((item) => item.status === "published").length,
+      approvalQueue: activeContentItems.filter((item) => item.status === "in_review").length,
       postingGoalPerWeek: resolvedProfile.posting_goal_per_week,
     },
+    analytics: {
+      byStatus,
+      byChannel,
+      aiGenerations: {
+        requests: aiRows.length,
+        estimatedCostUsd: aiRows.reduce((sum, row) => sum + Number(row.estimated_cost_usd ?? 0), 0),
+        averageLatencyMs: aiLatencyRows.length
+          ? Math.round(
+              aiLatencyRows.reduce((sum, row) => sum + (row.latency_ms ?? 0), 0) / aiLatencyRows.length,
+            )
+          : 0,
+        fallbackCount: aiRows.filter((row) => row.status === "fallback").length,
+      },
+    },
+    calendar,
     campaigns: allCampaigns.map((campaign) => ({
       id: campaign.id,
       theme: campaign.theme,
@@ -1458,6 +1537,8 @@ export async function getAdminSocialMediaData(): Promise<AdminSocialMediaData> {
       sourceEventType: campaign.source_event_type,
       scheduledWeekOf: campaign.scheduled_week_of,
       notes: campaign.notes,
+      generationSummary: campaign.generation_summary,
+      archivedAt: campaign.archived_at,
       createdAt: campaign.created_at,
       updatedAt: campaign.updated_at,
       createdByEmail: authByUser.get(campaign.created_by)?.email ?? null,
@@ -1477,6 +1558,9 @@ export async function getAdminSocialMediaData(): Promise<AdminSocialMediaData> {
       callToAction: item.call_to_action,
       hashtags: item.hashtags,
       visualDirection: item.visual_direction,
+      imagePrompt: item.image_prompt,
+      assetNotes: item.asset_notes,
+      referenceLinks: item.reference_links,
       updatedAt: item.updated_at,
     })),
   };
