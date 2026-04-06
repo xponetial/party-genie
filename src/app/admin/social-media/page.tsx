@@ -6,10 +6,12 @@ import {
   Megaphone,
   Rocket,
   Send,
+  Sparkles,
 } from "lucide-react";
 import {
   createSocialMediaCampaignAction,
   createSocialMediaContentItemAction,
+  generateSocialMediaCampaignAction,
   updateSocialMediaBrandProfileAction,
   updateSocialMediaCampaignStatusAction,
   updateSocialMediaContentStatusAction,
@@ -68,7 +70,7 @@ export default async function AdminSocialMediaPage() {
     <AdminShell
       currentSection="/admin/social-media"
       title="Social media AI studio"
-      description="Run Party Genie’s internal campaign engine: define brand voice, create campaigns, draft channel content, and move assets through review."
+      description="Run Party Genie's internal campaign engine: define brand voice, generate campaigns from a theme, draft channel content, and move assets through review."
       adminName={profile?.full_name}
     >
       <div className="grid gap-4 xl:grid-cols-3">
@@ -186,7 +188,7 @@ export default async function AdminSocialMediaPage() {
               <div>
                 <p className="text-sm font-semibold text-ink">Current voice owner</p>
                 <p className="mt-1 text-sm text-ink-muted">
-                  {social.brandProfile.updatedByName ?? social.brandProfile.updatedByEmail ?? "Not recorded yet"} • Last updated{" "}
+                  {social.brandProfile.updatedByName ?? social.brandProfile.updatedByEmail ?? "Not recorded yet"} / Last updated{" "}
                   {formatAdminDateTime(social.brandProfile.updatedAt)}
                 </p>
               </div>
@@ -197,74 +199,136 @@ export default async function AdminSocialMediaPage() {
           </form>
         </DashboardPanel>
 
-        <DashboardPanel
-          title="Campaign builder"
-          description="Create a new campaign brief from a party theme, audience, objective, and scheduling direction."
-        >
-          <form action={createSocialMediaCampaignAction} className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="theme">Party theme</Label>
-              <Input id="theme" name="theme" placeholder="Summer pool party for busy moms" required />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4">
+          <DashboardPanel
+            title="Generate campaign from theme"
+            description="Use the saved brand voice plus a single party theme to generate a ready-for-review campaign and channel drafts."
+          >
+            <form action={generateSocialMediaCampaignAction} className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="campaign-audience">Audience</Label>
+                <Label htmlFor="generate-theme">Party theme</Label>
                 <Input
-                  id="campaign-audience"
-                  name="audience"
-                  placeholder="Parents planning easy weekend parties"
+                  id="generate-theme"
+                  name="theme"
+                  placeholder="Backyard birthday brunch with cheerful spring colors"
                   required
                 />
               </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="audienceHint">Audience hint</Label>
+                  <Input
+                    id="audienceHint"
+                    name="audienceHint"
+                    placeholder="Parents planning low-stress birthdays"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="objectiveHint">Objective hint</Label>
+                  <Input
+                    id="objectiveHint"
+                    name="objectiveHint"
+                    placeholder="Drive saves and affiliate clicks"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="generate-sourceEventType">Source event type</Label>
+                  <Input
+                    id="generate-sourceEventType"
+                    name="sourceEventType"
+                    placeholder="birthday"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="generate-scheduledWeekOf">Week of</Label>
+                  <Input id="generate-scheduledWeekOf" name="scheduledWeekOf" type="date" />
+                </div>
+              </div>
+
+              <div className="rounded-3xl bg-canvas px-4 py-4 text-sm leading-6 text-ink-muted">
+                The generator creates one campaign plus five review-ready drafts across TikTok, Pinterest, Instagram, email, and landing-page copy.
+              </div>
+
+              <SubmitButton pendingLabel="Generating campaign...">
+                <Sparkles className="size-4" />
+                Generate campaign from theme
+              </SubmitButton>
+            </form>
+          </DashboardPanel>
+
+          <DashboardPanel
+            title="Campaign builder"
+            description="Create a campaign manually when you want tighter control over the brief before drafting content."
+          >
+            <form action={createSocialMediaCampaignAction} className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="objective">Objective</Label>
-                <Input
-                  id="objective"
-                  name="objective"
-                  placeholder="Drive saves and shopping clicks"
-                  required
+                <Label htmlFor="manual-theme">Party theme</Label>
+                <Input id="manual-theme" name="theme" placeholder="Summer pool party for busy moms" required />
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="campaign-audience">Audience</Label>
+                  <Input
+                    id="campaign-audience"
+                    name="audience"
+                    placeholder="Parents planning easy weekend parties"
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="objective">Objective</Label>
+                  <Input
+                    id="objective"
+                    name="objective"
+                    placeholder="Drive saves and shopping clicks"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="priority">Priority</Label>
+                  <select
+                    className="w-full rounded-2xl border border-border bg-white px-4 py-3 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-4 focus:ring-brand/10"
+                    defaultValue="medium"
+                    id="priority"
+                    name="priority"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <div className="grid gap-2">
+                <Label htmlFor="manual-sourceEventType">Source event type</Label>
+                <Input id="manual-sourceEventType" name="sourceEventType" placeholder="birthday" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="manual-scheduledWeekOf">Week of</Label>
+                <Input id="manual-scheduledWeekOf" name="scheduledWeekOf" type="date" />
+              </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="notes">Notes</Label>
+                <textarea
+                  className={textAreaClass}
+                  id="notes"
+                  name="notes"
+                  placeholder="Include affiliate-ready tableware roundups and a quick invite CTA."
                 />
               </div>
-            </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="grid gap-2">
-                <Label htmlFor="priority">Priority</Label>
-                <select
-                  className="w-full rounded-2xl border border-border bg-white px-4 py-3 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-4 focus:ring-brand/10"
-                  defaultValue="medium"
-                  id="priority"
-                  name="priority"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="sourceEventType">Source event type</Label>
-                <Input id="sourceEventType" name="sourceEventType" placeholder="birthday" />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="scheduledWeekOf">Week of</Label>
-                <Input id="scheduledWeekOf" name="scheduledWeekOf" type="date" />
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="notes">Notes</Label>
-              <textarea
-                className={textAreaClass}
-                id="notes"
-                name="notes"
-                placeholder="Include affiliate-ready tableware roundups and a quick invite CTA."
-              />
-            </div>
-
-            <SubmitButton pendingLabel="Creating campaign...">Create campaign</SubmitButton>
-          </form>
-        </DashboardPanel>
+              <SubmitButton pendingLabel="Creating campaign...">Create campaign</SubmitButton>
+            </form>
+          </DashboardPanel>
+        </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -286,22 +350,25 @@ export default async function AdminSocialMediaPage() {
                         </span>
                       </div>
                       <p className="mt-2 text-sm leading-6 text-ink-muted">
-                        {campaign.audience} • {campaign.objective}
+                        {campaign.audience} / {campaign.objective}
                       </p>
                       <p className="mt-2 text-sm leading-6 text-ink-muted">
-                        {campaign.sourceEventType ? `${campaign.sourceEventType} • ` : ""}
-                        {campaign.scheduledWeekOf ? `Week of ${campaign.scheduledWeekOf} • ` : ""}
+                        {campaign.sourceEventType ? `${campaign.sourceEventType} / ` : ""}
+                        {campaign.scheduledWeekOf ? `Week of ${campaign.scheduledWeekOf} / ` : ""}
                         {campaign.contentCount} content item{campaign.contentCount === 1 ? "" : "s"}
                       </p>
                       {campaign.notes ? (
                         <p className="mt-2 text-sm leading-6 text-ink-muted">{campaign.notes}</p>
                       ) : null}
                       <p className="mt-3 text-xs uppercase tracking-[0.16em] text-ink-muted">
-                        Updated {formatAdminDateTime(campaign.updatedAt)} • {campaign.createdByName ?? campaign.createdByEmail ?? "Admin"}
+                        Updated {formatAdminDateTime(campaign.updatedAt)} / {campaign.createdByName ?? campaign.createdByEmail ?? "Admin"}
                       </p>
                     </div>
 
-                    <form action={updateSocialMediaCampaignStatusAction} className="grid gap-3 rounded-3xl bg-canvas p-4 sm:grid-cols-[1fr_auto]">
+                    <form
+                      action={updateSocialMediaCampaignStatusAction}
+                      className="grid gap-3 rounded-3xl bg-canvas p-4 sm:grid-cols-[1fr_auto]"
+                    >
                       <input name="campaignId" type="hidden" value={campaign.id} />
                       <select
                         className="w-full rounded-2xl border border-border bg-white px-4 py-3 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-4 focus:ring-brand/10"
@@ -323,7 +390,7 @@ export default async function AdminSocialMediaPage() {
               ))
             ) : (
               <div className="rounded-3xl border border-border bg-canvas px-4 py-5 text-sm leading-6 text-ink-muted">
-                No campaigns yet. Create the first brief to start the social workflow.
+                No campaigns yet. Create the first brief or generate one from a theme to start the social workflow.
               </div>
             )}
           </div>
@@ -448,10 +515,10 @@ export default async function AdminSocialMediaPage() {
                       </span>
                     </div>
                     <p className="mt-2 text-sm leading-6 text-ink-muted">
-                      {item.campaignTheme} • {item.formatDetail}
+                      {item.campaignTheme} / {item.formatDetail}
                     </p>
                     <p className="mt-2 text-sm leading-6 text-ink-muted">
-                      {item.publishOn ? `Publish on ${item.publishOn} • ` : ""}
+                      {item.publishOn ? `Publish on ${item.publishOn} / ` : ""}
                       Updated {formatAdminDateTime(item.updatedAt)}
                     </p>
                     <p className="mt-3 line-clamp-3 text-sm leading-6 text-ink-muted">{item.copy}</p>
@@ -465,7 +532,10 @@ export default async function AdminSocialMediaPage() {
                     ) : null}
                   </div>
 
-                  <form action={updateSocialMediaContentStatusAction} className="grid gap-3 rounded-3xl bg-canvas p-4 sm:grid-cols-[1fr_auto]">
+                  <form
+                    action={updateSocialMediaContentStatusAction}
+                    className="grid gap-3 rounded-3xl bg-canvas p-4 sm:grid-cols-[1fr_auto]"
+                  >
                     <input name="contentItemId" type="hidden" value={item.id} />
                     <select
                       className="w-full rounded-2xl border border-border bg-white px-4 py-3 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-4 focus:ring-brand/10"

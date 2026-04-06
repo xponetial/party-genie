@@ -2,6 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import {
+  generateSocialCampaign,
+  getOpenAIModel,
+  getPromptVersion,
+  type SocialBrandProfileContext,
+} from "@/lib/ai/party-genie";
 import { requireAdminAccess } from "@/lib/admin";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -52,6 +58,14 @@ const socialMediaCampaignStatusSchema = z.object({
   status: z.enum(["draft", "in_review", "approved", "scheduled", "published"]),
 });
 
+const socialMediaGenerateCampaignSchema = z.object({
+  theme: z.string().trim().min(3).max(120),
+  audienceHint: z.string().trim().max(200).optional(),
+  objectiveHint: z.string().trim().max(200).optional(),
+  sourceEventType: z.string().trim().max(120).optional(),
+  scheduledWeekOf: z.string().trim().optional(),
+});
+
 const socialMediaContentItemSchema = z.object({
   campaignId: z.string().uuid(),
   channel: z.enum(["tiktok", "pinterest", "instagram", "email", "landing_page"]),
@@ -72,6 +86,109 @@ const socialMediaContentStatusSchema = z.object({
 function revalidateSocialMediaPaths() {
   revalidatePath("/admin");
   revalidatePath("/admin/social-media");
+}
+
+function currentUsageMonth() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    .toISOString()
+    .slice(0, 10);
+}
+
+function buildSocialRequestFingerprint(input: Record<string, unknown>) {
+  return JSON.stringify(input, Object.keys(input).sort());
+}
+
+async function trackAdminAiGeneration({
+  userId,
+  generationType,
+  model,
+  requestFingerprint,
+  promptVersion,
+  inputTokens,
+  outputTokens,
+  cachedInputTokens,
+  estimatedCostUsd,
+  latencyMs,
+  status,
+}: {
+  userId: string;
+  generationType: string;
+  model: string;
+  requestFingerprint: string;
+  promptVersion: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  estimatedCostUsd: number;
+  latencyMs: number;
+  status: "success" | "fallback" | "error";
+}) {
+  const supabase = createSupabaseAdminClient();
+
+  await supabase.from("ai_generations").insert({
+    user_id: userId,
+    event_id: null,
+    generation_type: generationType,
+    model,
+    request_fingerprint: requestFingerprint,
+    prompt_version: promptVersion,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    cached_input_tokens: cachedInputTokens,
+    estimated_cost_usd: estimatedCostUsd,
+    latency_ms: latencyMs,
+    status,
+  });
+
+  const usageMonth = currentUsageMonth();
+  const { data: existingUsage } = await supabase
+    .from("user_usage_monthly")
+    .select("id, requests_count, input_tokens, output_tokens, cached_input_tokens, estimated_cost_usd")
+    .eq("user_id", userId)
+    .eq("usage_month", usageMonth)
+    .maybeSingle<{
+      id: string;
+      requests_count: number;
+      input_tokens: number;
+      output_tokens: number;
+      cached_input_tokens: number;
+      estimated_cost_usd: number;
+    }>();
+
+  const payload = {
+    user_id: userId,
+    usage_month: usageMonth,
+    requests_count: (existingUsage?.requests_count ?? 0) + 1,
+    input_tokens: (existingUsage?.input_tokens ?? 0) + inputTokens,
+    output_tokens: (existingUsage?.output_tokens ?? 0) + outputTokens,
+    cached_input_tokens: (existingUsage?.cached_input_tokens ?? 0) + cachedInputTokens,
+    estimated_cost_usd: Number(
+      ((existingUsage?.estimated_cost_usd ?? 0) + estimatedCostUsd).toFixed(6),
+    ),
+  };
+
+  if (existingUsage) {
+    await supabase.from("user_usage_monthly").update(payload).eq("id", existingUsage.id);
+    return;
+  }
+
+  await supabase.from("user_usage_monthly").insert(payload);
+}
+
+function buildPublishDate(weekOf: string | null, publishOffsetDays: number) {
+  if (!weekOf) {
+    return null;
+  }
+
+  const base = new Date(`${weekOf}T00:00:00.000Z`);
+
+  if (Number.isNaN(base.getTime())) {
+    return null;
+  }
+
+  base.setUTCDate(base.getUTCDate() + publishOffsetDays);
+  return base.toISOString().slice(0, 10);
 }
 
 export async function updateAdminUserPlanTierAction(formData: FormData) {
@@ -263,6 +380,122 @@ export async function createSocialMediaCampaignAction(formData: FormData) {
   if (error) {
     throw new Error(error.message);
   }
+
+  revalidateSocialMediaPaths();
+}
+
+export async function generateSocialMediaCampaignAction(formData: FormData) {
+  const admin = await requireAdminAccess();
+  const parsed = socialMediaGenerateCampaignSchema.safeParse({
+    theme: formData.get("theme"),
+    audienceHint: formData.get("audienceHint") || undefined,
+    objectiveHint: formData.get("objectiveHint") || undefined,
+    sourceEventType: formData.get("sourceEventType") || undefined,
+    scheduledWeekOf: formData.get("scheduledWeekOf") || undefined,
+  });
+
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "Invalid campaign generation request.");
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const { data: profile } = await supabase
+    .from("social_media_brand_profiles")
+    .select("tone, audience, signature_phrases, cta_style, posting_goal_per_week, focus_metrics")
+    .eq("scope", "default")
+    .maybeSingle<{
+      tone: string;
+      audience: string;
+      signature_phrases: string;
+      cta_style: string;
+      posting_goal_per_week: number;
+      focus_metrics: string;
+    }>();
+
+  const brandProfile: SocialBrandProfileContext = {
+    tone: profile?.tone ?? "Celebratory, practical, confidence-building.",
+    audience: profile?.audience ?? "Hosts planning birthdays, showers, seasonal parties, and family gatherings.",
+    signaturePhrases: profile?.signature_phrases ?? "easy-to-host, guest-ready, party-worthy",
+    ctaStyle: profile?.cta_style ?? "save this, shop the look, plan your version",
+    postingGoalPerWeek: profile?.posting_goal_per_week ?? 12,
+    focusMetrics: profile?.focus_metrics ?? "engagement rate, ctr, conversions, posts per week",
+  };
+
+  const generated = await generateSocialCampaign(
+    {
+      theme: parsed.data.theme,
+      audienceHint: parsed.data.audienceHint,
+      objectiveHint: parsed.data.objectiveHint,
+      sourceEventType: parsed.data.sourceEventType,
+    },
+    brandProfile,
+  );
+
+  const scheduledWeekOf = parsed.data.scheduledWeekOf?.trim() || null;
+  const { data: createdCampaign, error: campaignError } = await supabase
+    .from("social_media_campaigns")
+    .insert({
+      theme: parsed.data.theme,
+      audience: generated.audience,
+      objective: generated.objective,
+      priority: generated.priority,
+      source_event_type: generated.sourceEventType,
+      scheduled_week_of: scheduledWeekOf,
+      notes: generated.notes,
+      status: "in_review",
+      created_by: admin.userId,
+    })
+    .select("id")
+    .single<{ id: string }>();
+
+  if (campaignError || !createdCampaign) {
+    throw new Error(campaignError?.message ?? "Unable to create generated campaign.");
+  }
+
+  const { error: contentError } = await supabase.from("social_media_content_items").insert(
+    generated.contentItems.map((item) => ({
+      campaign_id: createdCampaign.id,
+      channel: item.channel,
+      title: item.title,
+      format_detail: item.formatDetail,
+      status: "in_review",
+      publish_on: buildPublishDate(scheduledWeekOf, item.publishOffsetDays),
+      copy: item.copy,
+      call_to_action: item.callToAction,
+      hashtags: item.hashtags,
+      visual_direction: item.visualDirection,
+    })),
+  );
+
+  if (contentError) {
+    throw new Error(contentError.message);
+  }
+
+  const usage = generated.rawResponse.usage;
+  await trackAdminAiGeneration({
+    userId: admin.userId,
+    generationType: "social_campaign",
+    model: generated.rawResponse.model ?? getOpenAIModel("plan"),
+    requestFingerprint: buildSocialRequestFingerprint({
+      theme: parsed.data.theme.trim().toLowerCase(),
+      audienceHint: parsed.data.audienceHint?.trim().toLowerCase() ?? null,
+      objectiveHint: parsed.data.objectiveHint?.trim().toLowerCase() ?? null,
+      sourceEventType: parsed.data.sourceEventType?.trim().toLowerCase() ?? null,
+      tone: brandProfile.tone.trim().toLowerCase(),
+      audience: brandProfile.audience.trim().toLowerCase(),
+      signaturePhrases: brandProfile.signaturePhrases.trim().toLowerCase(),
+      ctaStyle: brandProfile.ctaStyle.trim().toLowerCase(),
+      focusMetrics: brandProfile.focusMetrics.trim().toLowerCase(),
+      postingGoalPerWeek: brandProfile.postingGoalPerWeek,
+    }),
+    promptVersion: generated.rawResponse.promptVersion ?? getPromptVersion("social_campaign"),
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+    cachedInputTokens: usage?.cachedInputTokens ?? 0,
+    estimatedCostUsd: usage?.estimatedCostUsd ?? 0,
+    latencyMs: usage?.latencyMs ?? 0,
+    status: usage?.usedFallback ? "fallback" : "success",
+  });
 
   revalidateSocialMediaPaths();
 }

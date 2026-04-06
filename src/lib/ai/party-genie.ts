@@ -59,6 +59,7 @@ export type AiGenerationType =
   | "plan_revision"
   | "invitation_text"
   | "shopping_list_transform"
+  | "social_campaign"
   | "premium_concierge";
 
 export type AiUsageMetadata = {
@@ -93,6 +94,50 @@ type ShoppingGenerationContext = {
 type ShoppingReplacementContext = ShoppingGenerationContext & {
   existingCategoryNames?: string[] | null;
   feedback?: "general" | "too_expensive" | "not_my_style";
+};
+
+export type SocialBrandProfileContext = {
+  tone: string;
+  audience: string;
+  signaturePhrases: string;
+  ctaStyle: string;
+  focusMetrics: string;
+  postingGoalPerWeek: number;
+};
+
+type SocialCampaignGenerationInput = {
+  theme: string;
+  sourceEventType?: string | null;
+  audienceHint?: string | null;
+  objectiveHint?: string | null;
+};
+
+type GeneratedSocialContentItem = {
+  channel: "tiktok" | "pinterest" | "instagram" | "email" | "landing_page";
+  title: string;
+  formatDetail: string;
+  copy: string;
+  callToAction: string;
+  hashtags: string;
+  visualDirection: string;
+  publishOffsetDays: number;
+};
+
+export type GeneratedSocialCampaign = {
+  audience: string;
+  objective: string;
+  priority: "low" | "medium" | "high";
+  sourceEventType: string | null;
+  notes: string;
+  contentItems: GeneratedSocialContentItem[];
+  rawResponse: {
+    provider: string;
+    generatedAt: string;
+    summary: string;
+    model?: string;
+    promptVersion?: string;
+    usage?: AiUsageMetadata;
+  };
 };
 
 type ReplacementCandidate = Omit<GeneratedShoppingItem, "external_url"> & {
@@ -151,12 +196,33 @@ const generatedShoppingListSchema = z.object({
   shoppingCategories: z.array(generatedShoppingCategorySchema).min(2),
 });
 
+const generatedSocialContentItemSchema = z.object({
+  channel: z.enum(["tiktok", "pinterest", "instagram", "email", "landing_page"]),
+  title: z.string().min(6).max(120),
+  formatDetail: z.string().min(6).max(240),
+  copy: z.string().min(40).max(4000),
+  callToAction: z.string().min(2).max(240),
+  hashtags: z.string().min(2).max(500),
+  visualDirection: z.string().min(8).max(1200),
+  publishOffsetDays: z.number().int().min(0).max(30),
+});
+
+const generatedSocialCampaignSchema = z.object({
+  audience: z.string().min(3).max(200),
+  objective: z.string().min(3).max(200),
+  priority: z.enum(["low", "medium", "high"]),
+  sourceEventType: z.string().min(2).max(120).nullable(),
+  notes: z.string().min(10).max(1500),
+  contentItems: z.array(generatedSocialContentItemSchema).min(5).max(7),
+});
+
 type AiTaskType = "plan" | "lightweight" | "premium";
 const PROMPT_VERSIONS: Record<AiGenerationType, string> = {
   party_plan: "party-plan-v2",
   plan_revision: "plan-revision-v1",
   invitation_text: "invitation-text-v2",
   shopping_list_transform: "shopping-list-v2",
+  social_campaign: "social-campaign-v1",
   premium_concierge: "premium-concierge-v1",
 };
 const MODEL_PRICING: Record<
@@ -268,6 +334,109 @@ function toTitleCase(value: string) {
 
 function buildAmazonSearchUrl(query: string) {
   return `https://www.amazon.com/s?k=${encodeURIComponent(query.trim())}`;
+}
+
+const SOCIAL_CHANNEL_ORDER = [
+  "tiktok",
+  "pinterest",
+  "instagram",
+  "email",
+  "landing_page",
+] as const;
+
+function normalizeSocialTheme(value: string) {
+  return value.trim() || "Party Genie seasonal campaign";
+}
+
+function buildSocialContentFallbackItem(
+  channel: (typeof SOCIAL_CHANNEL_ORDER)[number],
+  theme: string,
+  brandProfile: SocialBrandProfileContext,
+): GeneratedSocialContentItem {
+  const normalizedTheme = normalizeSocialTheme(theme);
+  const signaturePhrase = brandProfile.signaturePhrases.split(",")[0]?.trim() || "party-worthy";
+  const cta = brandProfile.ctaStyle.split(",")[0]?.trim() || "Save this idea";
+
+  const base = {
+    hashtags: "#partyideas #hostingtips #partygenie",
+    visualDirection: `Use bright, polished lifestyle visuals that feel ${brandProfile.tone.toLowerCase()} and show a ${signaturePhrase.toLowerCase()} version of ${normalizedTheme.toLowerCase()}.`,
+  };
+
+  switch (channel) {
+    case "tiktok":
+      return {
+        channel,
+        title: `${normalizedTheme}: 3 fast host hooks`,
+        formatDetail: "Short-form video concept with hook, scene beats, and fast payoff",
+        copy: `Hook: planning ${normalizedTheme.toLowerCase()} does not have to feel overwhelming. Show three quick upgrades that make the setup feel finished, guest-ready, and easy to shop. Close by reinforcing that hosts can make the whole celebration feel intentional without overcomplicating it.`,
+        callToAction: cta,
+        publishOffsetDays: 0,
+        ...base,
+      };
+    case "pinterest":
+      return {
+        channel,
+        title: `${normalizedTheme} inspiration board`,
+        formatDetail: "Pin title, save-focused description, and affiliate-friendly angle",
+        copy: `Pin this ${normalizedTheme.toLowerCase()} setup for your next celebration. Focus on decor, table styling, and host shortcuts that keep the event easy to pull together while still looking elevated.`,
+        callToAction: "Save this for later",
+        publishOffsetDays: 1,
+        ...base,
+      };
+    case "instagram":
+      return {
+        channel,
+        title: `${normalizedTheme} carousel caption`,
+        formatDetail: "Carousel post with 4 to 6 frames and a save-first CTA",
+        copy: `Hosts looking for a ${normalizedTheme.toLowerCase()} can keep it simple: start with a strong table moment, layer in easy food wins, and finish with one or two details that make the whole gathering feel memorable. This is the kind of celebration that looks polished without becoming stressful.`,
+        callToAction: "Save this for your next party",
+        publishOffsetDays: 2,
+        ...base,
+      };
+    case "email":
+      return {
+        channel,
+        title: `${normalizedTheme} email teaser`,
+        formatDetail: "Subject line direction and short teaser body copy",
+        copy: `Subject line idea: ${normalizedTheme} ideas hosts can use this week. Teaser copy: here is a faster way to style the party, tighten the guest experience, and turn the event into something people want to copy.`,
+        callToAction: "Open the full guide",
+        publishOffsetDays: 3,
+        ...base,
+      };
+    case "landing_page":
+      return {
+        channel,
+        title: `${normalizedTheme} landing page hero`,
+        formatDetail: "Hero copy, support text, and conversion-focused CTA",
+        copy: `Headline direction: make your ${normalizedTheme.toLowerCase()} feel guest-ready fast. Support copy should frame Party Genie as the shortcut to planning, invites, inspiration, and shopping momentum in one place.`,
+        callToAction: "Plan your version",
+        publishOffsetDays: 4,
+        ...base,
+      };
+  }
+}
+
+function normalizeGeneratedSocialContentItems(
+  items: GeneratedSocialContentItem[],
+  theme: string,
+  brandProfile: SocialBrandProfileContext,
+) {
+  const itemByChannel = new Map<
+    GeneratedSocialContentItem["channel"],
+    GeneratedSocialContentItem
+  >();
+
+  for (const item of items) {
+    if (!itemByChannel.has(item.channel)) {
+      itemByChannel.set(item.channel, item);
+    }
+  }
+
+  return SOCIAL_CHANNEL_ORDER.map(
+    (channel) =>
+      itemByChannel.get(channel) ??
+      buildSocialContentFallbackItem(channel, theme, brandProfile),
+  );
 }
 
 function normalizeAmazonRecommendation(item: Omit<GeneratedShoppingItem, "external_url"> & { external_url?: string | null }) {
@@ -980,6 +1149,115 @@ export function buildShoppingList(event: EventSeed, context?: ShoppingGeneration
   };
 }
 
+export function buildSocialCampaign(
+  input: SocialCampaignGenerationInput,
+  brandProfile: SocialBrandProfileContext,
+): GeneratedSocialCampaign {
+  const theme = normalizeSocialTheme(input.theme);
+  const audience =
+    input.audienceHint?.trim() || brandProfile.audience || "Hosts planning stylish, low-stress celebrations.";
+  const objective =
+    input.objectiveHint?.trim() || `Drive saves, clicks, and planning intent around ${theme}.`;
+  const sourceEventType = input.sourceEventType?.trim() || null;
+  const contentItems = normalizeGeneratedSocialContentItems([], theme, brandProfile);
+
+  return {
+    audience,
+    objective,
+    priority: "medium",
+    sourceEventType,
+    notes: `Built from the theme "${theme}" using the current brand voice. Focus on ${brandProfile.focusMetrics.toLowerCase()} and keep the tone ${brandProfile.tone.toLowerCase()}.`,
+    contentItems,
+    rawResponse: {
+      provider: "party-genie-social-fallback",
+      generatedAt: new Date().toISOString(),
+      summary: `Generated a fallback social campaign for ${theme}.`,
+    },
+  };
+}
+
+export async function generateSocialCampaign(
+  input: SocialCampaignGenerationInput,
+  brandProfile: SocialBrandProfileContext,
+): Promise<GeneratedSocialCampaign> {
+  const fallback = buildSocialCampaign(input, brandProfile);
+  const theme = normalizeSocialTheme(input.theme);
+  const generated = await generateStructuredObject({
+    generationType: "social_campaign",
+    taskType: "plan",
+    systemPrompt:
+      "You are Party Genie's internal social media strategist. Build multi-channel campaign drafts that are actionable, brand-consistent, practical for admins to review, and tailored to event-driven content marketing.",
+    userPrompt: `Create a social media campaign package for this theme.
+
+Theme: ${theme}
+Source event type: ${input.sourceEventType?.trim() || "Not provided"}
+Audience hint: ${input.audienceHint?.trim() || "Use the brand profile default"}
+Objective hint: ${input.objectiveHint?.trim() || "Use the strongest fit for this theme"}
+
+Brand profile:
+- Tone: ${brandProfile.tone}
+- Audience: ${brandProfile.audience}
+- Signature phrases: ${brandProfile.signaturePhrases}
+- CTA style: ${brandProfile.ctaStyle}
+- Focus metrics: ${brandProfile.focusMetrics}
+- Posting goal per week: ${brandProfile.postingGoalPerWeek}
+
+Requirements:
+- Return one campaign package that admins can review immediately.
+- Include exactly one content item for each channel: tiktok, pinterest, instagram, email, landing_page.
+- Keep each item distinct and matched to the channel's native format.
+- Make the copy useful for Party Genie as an event-planning and affiliate-friendly brand.
+- The content should convert planning intent, not just entertain.
+- Use concrete hooks, captions, CTA ideas, and visual direction.
+- Stagger publishOffsetDays across the week, starting at 0.
+- Return JSON only.`,
+    schema: generatedSocialCampaignSchema,
+  }).catch(() => null);
+
+  if (!generated) {
+    return {
+      ...fallback,
+      rawResponse: {
+        ...fallback.rawResponse,
+        model: getOpenAIModel("plan"),
+        promptVersion: getPromptVersion("social_campaign"),
+        usage: {
+          model: getOpenAIModel("plan"),
+          promptVersion: getPromptVersion("social_campaign"),
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          estimatedCostUsd: 0,
+          latencyMs: 0,
+          provider: "party-genie-social-fallback",
+          usedFallback: true,
+        },
+      },
+    };
+  }
+
+  return {
+    audience: generated.data.audience,
+    objective: generated.data.objective,
+    priority: generated.data.priority,
+    sourceEventType: generated.data.sourceEventType,
+    notes: generated.data.notes,
+    contentItems: normalizeGeneratedSocialContentItems(
+      generated.data.contentItems,
+      theme,
+      brandProfile,
+    ),
+    rawResponse: {
+      provider: generated.usage.provider,
+      generatedAt: new Date().toISOString(),
+      summary: `Generated a social campaign for ${theme}.`,
+      model: generated.usage.model,
+      promptVersion: generated.usage.promptVersion,
+      usage: generated.usage,
+    },
+  };
+}
+
 export async function revisePartyPlan({
   event,
   currentPlan,
@@ -1412,4 +1690,8 @@ Requirements:
 }
 
 export { getOpenAIModel, getPromptVersion };
-export type { EventSeed, GeneratedShoppingItem };
+export type {
+  EventSeed,
+  GeneratedShoppingItem,
+  SocialCampaignGenerationInput,
+};
