@@ -195,13 +195,19 @@ export function InviteTemplateStudio({
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-ink-muted">Step 1 of 4</p>
               <p className="text-xs uppercase tracking-[0.18em] text-ink-muted">Card copy</p>
               <h3 className="mt-2 text-xl font-semibold text-ink">Edit the invitation details</h3>
             </div>
-            <p className="rounded-2xl border border-border bg-[rgba(237,243,255,0.92)] px-4 py-3 text-sm text-ink">
-              RSVP links are live automatically for guest invites.
-            </p>
+            <label className="flex items-center gap-3 rounded-2xl border border-border bg-[rgba(237,243,255,0.92)] px-4 py-3 text-sm text-ink">
+              <input
+                type="checkbox"
+                name="isPublic"
+                value="true"
+                defaultChecked={invite.is_public}
+                className="size-4 accent-[var(--brand)]"
+              />
+              Enable public RSVP link
+            </label>
           </div>
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -288,6 +294,20 @@ export function InviteTemplateStudio({
                 value={design.fields.messageText}
               />
             </label>
+            <label className="space-y-2">
+              <Label htmlFor="card-cta">Call to action</Label>
+              <input
+                id="card-cta"
+                className="w-full rounded-2xl border border-border bg-[rgba(237,243,255,0.92)] px-4 py-3 text-sm text-ink outline-none transition focus:border-brand/50 focus:ring-4 focus:ring-brand/10"
+                onChange={(eventValue) =>
+                  setDesign((current) => ({
+                    ...current,
+                    fields: { ...current.fields, ctaText: eventValue.target.value },
+                  }))
+                }
+                value={design.fields.ctaText}
+              />
+            </label>
           </div>
 
           <div className="mt-5">
@@ -297,13 +317,12 @@ export function InviteTemplateStudio({
           </div>
 
           <div className="mt-4 rounded-[1.5rem] border border-border bg-[rgba(244,247,255,0.9)] p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-ink-muted">Next step</p>
             <p className="text-sm leading-6 text-ink-muted">
               Once the card looks right, move into guest management to add recipients, review RSVP
               status, and send the invite.
             </p>
             <Button asChild className="mt-3">
-              <Link href={`/events/${event.id}/guests/add`}>Next: Guest management</Link>
+              <Link href={`/events/${event.id}/guests`}>Next: Guest management</Link>
             </Button>
           </div>
         </form>

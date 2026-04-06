@@ -9,6 +9,5 @@ export const ANALYTICS_EVENTS = [
   "invite_sent",
   "rsvp_received",
   "shopping_link_clicked",
-  "shopping_pick_replaced",
   "task_completed",
 ] as const;

@@ -3,7 +3,6 @@ import "server-only";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { cache } from "react";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type {
   InviteTemplate,
   InviteTemplateCategory,
@@ -44,13 +43,6 @@ type CodexManifest = {
     };
     overlay_recommendations?: OverlayRecommendation;
   }>;
-};
-
-type TemplateAdminControl = {
-  pack_slug: string;
-  template_id: string;
-  is_active: boolean;
-  notes: string | null;
 };
 
 function slugifyLabel(value: string) {
@@ -196,29 +188,10 @@ function parseManifest(packSlug: string, manifest: GenericManifest | CodexManife
   );
 }
 
-async function getTemplateAdminControls() {
-  try {
-    const supabase = createSupabaseAdminClient();
-    const { data, error } = await supabase
-      .from("template_admin_controls")
-      .select("pack_slug, template_id, is_active, notes")
-      .returns<TemplateAdminControl[]>();
-
-    if (error) {
-      return new Map<string, TemplateAdminControl>();
-    }
-
-    return new Map((data ?? []).map((item) => [`${item.pack_slug}:${item.template_id}`, item] as const));
-  } catch {
-    return new Map<string, TemplateAdminControl>();
-  }
-}
-
-export const getInviteTemplateCatalog = cache(async (includeInactive = false): Promise<InviteTemplateCategory[]> => {
+export const getInviteTemplateCatalog = cache(async (): Promise<InviteTemplateCategory[]> => {
   const invitePacksDir = path.join(process.cwd(), "public", "invite-packs");
   const packDirs = await fs.readdir(invitePacksDir, { withFileTypes: true });
   const templates: InviteTemplate[] = [];
-  const adminControls = await getTemplateAdminControls();
 
   for (const packDir of packDirs) {
     if (!packDir.isDirectory()) continue;
@@ -232,11 +205,6 @@ export const getInviteTemplateCatalog = cache(async (includeInactive = false): P
   const grouped = new Map<string, InviteTemplateCategory>();
 
   for (const template of templates) {
-    const control = adminControls.get(`${template.packSlug}:${template.templateId}`);
-    if (!includeInactive && control?.is_active === false) {
-      continue;
-    }
-
     const existing = grouped.get(template.categoryKey);
     if (existing) {
       existing.templates.push(template);

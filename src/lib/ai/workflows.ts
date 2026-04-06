@@ -8,7 +8,6 @@ import {
   generatePartyPlan,
   revisePartyPlan,
   generateShoppingList,
-  generateReplacementShoppingItem,
   getOpenAIModel,
   getPromptVersion,
 } from "@/lib/ai/party-genie";
@@ -290,88 +289,6 @@ async function getCurrentPlanRecord(supabase: SupabaseClient, eventId: string) {
   return data ?? null;
 }
 
-async function getPlanContextForShopping(supabase: SupabaseClient, eventId: string) {
-  const { data } = await supabase
-    .from("party_plans")
-    .select("theme, menu, shopping_categories")
-    .eq("event_id", eventId)
-    .maybeSingle<{
-      theme: string | null;
-      menu: string[] | null;
-      shopping_categories:
-        | Array<{ category: string; items: Array<{ name: string; quantity: number }> }>
-        | null;
-    }>();
-
-  return data ?? null;
-}
-
-async function recalculateShoppingListEstimate(
-  supabase: SupabaseClient,
-  shoppingListId: string,
-) {
-  const { data: itemsData } = await supabase
-    .from("shopping_items")
-    .select("estimated_price, quantity")
-    .eq("shopping_list_id", shoppingListId)
-    .neq("status", "removed")
-    .returns<Array<{ estimated_price: number | null; quantity: number }>>();
-  const items = itemsData ?? [];
-
-  const estimatedTotal = items.reduce(
-    (sum, item) => sum + (item.estimated_price ?? 0) * item.quantity,
-    0,
-  );
-
-  await supabase
-    .from("shopping_lists")
-    .update({ estimated_total: estimatedTotal })
-    .eq("id", shoppingListId);
-
-  return estimatedTotal;
-}
-
-async function syncPlanCategoryReplacement(
-  supabase: SupabaseClient,
-  eventId: string,
-  {
-    previousItem,
-    replacementItem,
-  }: {
-    previousItem: { category: string; name: string; quantity: number };
-    replacementItem: { category: string; name: string; quantity: number };
-  },
-) {
-  const currentPlanRecord = await getCurrentPlanRecord(supabase, eventId);
-
-  if (!currentPlanRecord?.shopping_categories?.length) {
-    return;
-  }
-
-  const updatedCategories = currentPlanRecord.shopping_categories.map((category) => {
-    if (category.category.toLowerCase() !== previousItem.category.toLowerCase()) {
-      return category;
-    }
-
-    return {
-      ...category,
-      items: category.items.map((item) =>
-        item.name.toLowerCase() === previousItem.name.toLowerCase()
-          ? {
-              name: replacementItem.name,
-              quantity: replacementItem.quantity,
-            }
-          : item,
-      ),
-    };
-  });
-
-  await supabase
-    .from("party_plans")
-    .update({ shopping_categories: updatedCategories })
-    .eq("event_id", eventId);
-}
-
 async function ensureInvite(supabase: SupabaseClient, eventId: string, inviteCopy: string) {
   const { data: invite } = await supabase
     .from("invites")
@@ -446,9 +363,6 @@ async function syncShoppingItems(
     name: string;
     quantity: number;
     estimated_price: number | null;
-    recommendation_reason: string;
-    search_query: string;
-    image_url: string | null;
     external_url: string | null;
   }>,
 ) {
@@ -475,9 +389,6 @@ async function syncShoppingItems(
         name: item.name,
         quantity: item.quantity,
         estimated_price: item.estimated_price,
-        recommendation_reason: item.recommendation_reason,
-        search_query: item.search_query,
-        image_url: item.image_url,
         external_url: item.external_url,
         sort_order: index,
       })),
@@ -486,38 +397,6 @@ async function syncShoppingItems(
     if (error) {
       throw new Error(error.message);
     }
-  }
-
-  const matchingItems = generatedItems.filter((item) =>
-    existingKeys.has(`${item.category.toLowerCase()}::${item.name.toLowerCase()}`),
-  );
-
-  if (matchingItems.length) {
-    await Promise.all(
-      matchingItems.map((item) => {
-        const existingItem = existingItems.find(
-          (current) =>
-            current.category.toLowerCase() === item.category.toLowerCase() &&
-            current.name.toLowerCase() === item.name.toLowerCase(),
-        );
-
-        if (!existingItem) {
-          return Promise.resolve();
-        }
-
-        return supabase
-          .from("shopping_items")
-          .update({
-            quantity: item.quantity,
-            estimated_price: item.estimated_price,
-            recommendation_reason: item.recommendation_reason,
-            search_query: item.search_query,
-            image_url: item.image_url,
-            external_url: item.external_url,
-          })
-          .eq("id", existingItem.id);
-      }),
-    );
   }
 
   const { data: currentItemsData } = await supabase
@@ -551,9 +430,6 @@ async function replaceShoppingItems(
     name: string;
     quantity: number;
     estimated_price: number | null;
-    recommendation_reason: string | null;
-    search_query: string | null;
-    image_url: string | null;
     external_url: string | null;
   }>,
 ) {
@@ -567,9 +443,6 @@ async function replaceShoppingItems(
         name: item.name,
         quantity: item.quantity,
         estimated_price: item.estimated_price,
-        recommendation_reason: item.recommendation_reason,
-        search_query: item.search_query,
-        image_url: item.image_url,
         external_url: item.external_url,
         sort_order: index + 1,
       })),
@@ -714,9 +587,6 @@ function buildShoppingItemsFromCategories(
       name: item.name,
       quantity: item.quantity,
       estimated_price: null,
-      recommendation_reason: null,
-      search_query: null,
-      image_url: null,
       external_url: null,
     })),
   );
@@ -1198,12 +1068,7 @@ function getThemeFromEvent(event: EventRecord) {
 export async function generateShoppingListForEvent(supabase: SupabaseClient, eventId: string) {
   const event = await loadEventSeed(supabase, eventId);
   const shoppingList = await ensureShoppingList(supabase, eventId);
-  const planContext = await getPlanContextForShopping(supabase, eventId);
-  const generated = await generateShoppingList(event, {
-    planTheme: planContext?.theme ?? null,
-    menu: planContext?.menu ?? [],
-    shoppingCategories: planContext?.shopping_categories ?? [],
-  });
+  const generated = await generateShoppingList(event);
   const shoppingSummary = await syncShoppingItems(supabase, shoppingList.id, generated.shoppingItems);
   const fingerprintInput = buildEventFingerprint(event, "shopping_list_transform");
   const requestFingerprint = buildFingerprint(fingerprintInput);
@@ -1249,120 +1114,5 @@ export async function generateShoppingListForEvent(supabase: SupabaseClient, eve
     shoppingCategories: generated.shoppingCategories,
     addedCount: shoppingSummary.addedCount,
     estimatedTotal: shoppingSummary.estimatedTotal,
-  };
-}
-
-export async function replaceShoppingItemForEvent(
-  supabase: SupabaseClient,
-  eventId: string,
-  itemId: string,
-  feedback: "general" | "too_expensive" | "not_my_style" = "general",
-) {
-  const event = await loadEventSeed(supabase, eventId);
-  const { data: currentItem, error: currentItemError } = await supabase
-    .from("shopping_items")
-    .select("id, shopping_list_id, category, name, quantity")
-    .eq("id", itemId)
-    .single<{
-      id: string;
-      shopping_list_id: string;
-      category: string;
-      name: string;
-      quantity: number;
-    }>();
-
-  if (currentItemError || !currentItem) {
-    throw new Error(currentItemError?.message ?? "Shopping item not found.");
-  }
-
-  const [planContext, siblingItemsData] = await Promise.all([
-    getPlanContextForShopping(supabase, eventId),
-    supabase
-      .from("shopping_items")
-      .select("name")
-      .eq("shopping_list_id", currentItem.shopping_list_id)
-      .eq("category", currentItem.category)
-      .neq("id", itemId)
-      .returns<Array<{ name: string }>>(),
-  ]);
-  const siblingItems = siblingItemsData.data ?? [];
-
-  const replacement = await generateReplacementShoppingItem(
-    event,
-    {
-      category: currentItem.category,
-      name: currentItem.name,
-      quantity: currentItem.quantity,
-    },
-      {
-        planTheme: planContext?.theme ?? null,
-        menu: planContext?.menu ?? [],
-        shoppingCategories: planContext?.shopping_categories ?? [],
-        existingCategoryNames: siblingItems.map((item) => item.name),
-        feedback,
-      },
-    );
-  const requestFingerprint = buildFingerprint({
-    ...buildEventFingerprint(event, "shopping_list_transform"),
-    replaceItemId: currentItem.id,
-    replacementFeedback: feedback,
-    replaceCategory: currentItem.category.trim().toLowerCase(),
-    currentItemName: currentItem.name.trim().toLowerCase(),
-    siblingCategoryNames: siblingItems
-      .map((item) => item.name.trim().toLowerCase())
-      .sort(),
-  });
-  const model = replacement.rawResponse.model ?? getOpenAIModel("lightweight");
-  const promptVersion =
-    replacement.rawResponse.promptVersion ?? getPromptVersion("shopping_list_transform");
-
-  const { error: updateError } = await supabase
-    .from("shopping_items")
-    .update({
-      category: replacement.item.category,
-      name: replacement.item.name,
-      quantity: replacement.item.quantity,
-      estimated_price: replacement.item.estimated_price,
-      recommendation_reason: replacement.item.recommendation_reason,
-      search_query: replacement.item.search_query,
-      image_url: replacement.item.image_url,
-      external_url: replacement.item.external_url,
-      status: "pending",
-    })
-    .eq("id", currentItem.id);
-
-  if (updateError) {
-    throw new Error(updateError.message);
-  }
-
-  const estimatedTotal = await recalculateShoppingListEstimate(
-    supabase,
-    currentItem.shopping_list_id,
-  );
-
-  await syncPlanCategoryReplacement(supabase, eventId, {
-    previousItem: currentItem,
-    replacementItem: replacement.item,
-  });
-
-  const usage = replacement.rawResponse.usage;
-  await trackGeneration(supabase, {
-    userId: event.owner_id,
-    eventId,
-    generationType: "shopping_list_transform",
-    model,
-    requestFingerprint,
-    promptVersion,
-    inputTokens: usage?.inputTokens ?? 0,
-    outputTokens: usage?.outputTokens ?? 0,
-    cachedInputTokens: usage?.cachedInputTokens ?? 0,
-    estimatedCostUsd: usage?.estimatedCostUsd ?? 0,
-    latencyMs: usage?.latencyMs ?? 0,
-    status: usage?.usedFallback ? "fallback" : "success",
-  });
-
-  return {
-    itemName: replacement.item.name,
-    estimatedTotal,
   };
 }

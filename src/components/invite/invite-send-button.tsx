@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 
 type InviteSendButtonProps = {
   eventId: string;
+  inviteEnabled: boolean;
   pendingInviteCount: number;
   remindableGuestCount: number;
   emailableGuestCount: number;
@@ -22,6 +23,7 @@ type DeliveryAction = {
 
 export function InviteSendButton({
   eventId,
+  inviteEnabled,
   pendingInviteCount,
   remindableGuestCount,
   emailableGuestCount,
@@ -38,7 +40,7 @@ export function InviteSendButton({
       description: `${pendingInviteCount} guest${pendingInviteCount === 1 ? "" : "s"} have not been contacted yet.`,
       deliveryType: "invite",
       sendMode: "pending_only",
-      disabled: pendingInviteCount === 0,
+      disabled: !inviteEnabled || pendingInviteCount === 0,
     },
     {
       key: "invite-all",
@@ -47,7 +49,7 @@ export function InviteSendButton({
       description: `${emailableGuestCount} emailable guest${emailableGuestCount === 1 ? "" : "s"} can receive a fresh send.`,
       deliveryType: "invite",
       sendMode: "all",
-      disabled: emailableGuestCount === 0,
+      disabled: !inviteEnabled || emailableGuestCount === 0,
     },
     {
       key: "reminder-pending",
@@ -55,7 +57,7 @@ export function InviteSendButton({
       pendingLabel: "Sending reminders...",
       description: `${remindableGuestCount} pending guest${remindableGuestCount === 1 ? "" : "s"} already contacted can be nudged.`,
       deliveryType: "reminder",
-      disabled: remindableGuestCount === 0,
+      disabled: !inviteEnabled || remindableGuestCount === 0,
     },
   ];
 
@@ -95,9 +97,11 @@ export function InviteSendButton({
 
   return (
     <div className="space-y-3">
-      <p className="rounded-2xl border border-border bg-white/70 px-4 py-3 text-sm text-ink-muted">
-        Guest invite links are live automatically. Each email uses a personal RSVP link tied to that guest&apos;s token.
-      </p>
+      {!inviteEnabled ? (
+        <p className="rounded-2xl border border-border bg-white/70 px-4 py-3 text-sm text-ink-muted">
+          Turn on the public RSVP link in the invitation generator before sending invites or reminders.
+        </p>
+      ) : null}
       {actions.map((action) => (
         <div key={action.key} className="rounded-2xl border border-border bg-white/70 p-4">
           <p className="text-sm font-medium text-ink">{action.label}</p>
@@ -107,7 +111,7 @@ export function InviteSendButton({
             disabled={action.disabled || pendingAction !== null}
             onClick={() => handleClick(action)}
             type="button"
-            variant="primary"
+            variant={action.deliveryType === "reminder" ? "secondary" : "primary"}
           >
             {pendingAction === action.key ? action.pendingLabel : action.label}
           </Button>

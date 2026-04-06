@@ -3,12 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { enforceAiLimits } from "@/lib/ai/limits";
-import {
-  generatePlanForEvent,
-  replaceShoppingItemForEvent,
-  restorePlanVersionForEvent,
-} from "@/lib/ai/workflows";
+import { restorePlanVersionForEvent } from "@/lib/ai/workflows";
 import { inviteDesignSchema } from "@/lib/invite-design";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createAuditLog, trackAnalyticsEvent } from "@/lib/telemetry";
@@ -46,21 +41,6 @@ const guestSchema = z.object({
   plusOneCount: z.coerce.number().int().min(0).default(0),
 });
 
-const bulkGuestRowSchema = z.object({
-  name: z.string().trim().min(2),
-  email: z.email().optional().or(z.literal("")),
-  phone: z.string().trim().optional(),
-  plusOneCount: z.coerce.number().int().min(0).default(0),
-});
-
-export type GuestImportActionState = {
-  error?: string;
-  success?: string;
-  importedCount?: number;
-  skippedCount?: number;
-  rowErrors?: string[];
-};
-
 const updateGuestSchema = guestSchema.extend({
   guestId: z.string().uuid(),
   status: z.enum(["pending", "confirmed", "declined"]),
@@ -69,18 +49,6 @@ const updateGuestSchema = guestSchema.extend({
 const deleteGuestSchema = z.object({
   eventId: z.string().uuid(),
   guestId: z.string().uuid(),
-});
-
-export type BulkGuestActionState = {
-  error?: string;
-  success?: string;
-  affectedCount?: number;
-};
-
-const bulkGuestActionSchema = z.object({
-  eventId: z.string().uuid(),
-  guestIds: z.array(z.string().uuid()).min(1, "Select at least one guest."),
-  bulkActionType: z.enum(["confirmed", "pending", "declined", "delete"]),
 });
 
 const deleteEventSchema = z.object({
@@ -96,6 +64,7 @@ const inviteSchema = z.object({
   eventId: z.string().uuid(),
   inviteId: z.string().uuid(),
   inviteCopy: z.string().trim().min(10),
+  isPublic: z.enum(["true", "false"]).default("false"),
   designJson: z.string().optional(),
 });
 
@@ -118,13 +87,6 @@ const deleteShoppingItemSchema = z.object({
   eventId: z.string().uuid(),
   shoppingListId: z.string().uuid(),
   itemId: z.string().uuid(),
-});
-
-const replaceShoppingItemSchema = z.object({
-  eventId: z.string().uuid(),
-  shoppingListId: z.string().uuid(),
-  itemId: z.string().uuid(),
-  feedback: z.enum(["general", "too_expensive", "not_my_style"]).default("general"),
 });
 
 const shoppingSettingsSchema = z.object({
@@ -170,89 +132,6 @@ function parseDateTime(date?: string, time?: string) {
   if (!date) return null;
   if (!time) return new Date(`${date}T12:00:00`).toISOString();
   return new Date(`${date}T${time}:00`).toISOString();
-}
-
-function parseCsvLine(line: string) {
-  const values: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    const nextChar = line[index + 1];
-
-    if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        current += '"';
-        index += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === "," && !inQuotes) {
-      values.push(current.trim());
-      current = "";
-      continue;
-    }
-
-    current += char;
-  }
-
-  values.push(current.trim());
-  return values;
-}
-
-function parseGuestImportCsv(csvText: string) {
-  const normalizedText = csvText.replace(/^\uFEFF/, "").trim();
-
-  if (!normalizedText) {
-    throw new Error("The uploaded CSV is empty.");
-  }
-
-  const lines = normalizedText.split(/\r?\n/).filter((line) => line.trim().length > 0);
-
-  if (lines.length < 2) {
-    throw new Error("Add at least one guest row below the header.");
-  }
-
-  const headers = parseCsvLine(lines[0]).map((header) => header.trim().toLowerCase());
-  const requiredHeaders = ["name", "email", "phone", "plusonecount"];
-
-  if (!requiredHeaders.every((header) => headers.includes(header))) {
-    throw new Error("Use the sample CSV template so the column headers match.");
-  }
-
-  const validRows: Array<z.infer<typeof bulkGuestRowSchema>> = [];
-  const rowErrors: string[] = [];
-
-  lines.slice(1).forEach((line, index) => {
-    const values = parseCsvLine(line);
-    const record = Object.fromEntries(headers.map((header, headerIndex) => [header, values[headerIndex] ?? ""]));
-    const parsedRow = bulkGuestRowSchema.safeParse({
-      name: record.name,
-      email: record.email || "",
-      phone: record.phone || "",
-      plusOneCount: record.plusonecount || 0,
-    });
-
-    if (!parsedRow.success) {
-      rowErrors.push(`Row ${index + 2}: check the name, email, and plus-one fields.`);
-      return;
-    }
-
-    validRows.push(parsedRow.data);
-  });
-
-  if (!validRows.length) {
-    throw new Error("No valid guest rows were found in the uploaded CSV.");
-  }
-
-  return {
-    validRows,
-    rowErrors,
-  };
 }
 
 async function requireUser() {
@@ -358,7 +237,7 @@ export async function createEventAction(formData: FormData) {
       event_id: event.id,
       design_json: designJson,
       invite_copy: inviteCopy,
-      is_public: true,
+      is_public: false,
     }),
     supabase.from("shopping_lists").insert({
       event_id: event.id,
@@ -405,22 +284,8 @@ export async function createEventAction(formData: FormData) {
     }),
   ]);
 
-  try {
-    const limit = await enforceAiLimits(supabase, {
-      userId: user.id,
-      eventId: event.id,
-      generationType: "party_plan",
-    });
-
-    if (limit.allowed) {
-      await generatePlanForEvent(supabase, event.id);
-    }
-  } catch {
-    // Event creation should still succeed even if the first AI generation cannot run.
-  }
-
   revalidatePath("/dashboard");
-  redirect(`/events/${event.id}/invite`);
+  redirect(`/events/${event.id}`);
 }
 
 export async function saveInviteAction(formData: FormData) {
@@ -429,6 +294,7 @@ export async function saveInviteAction(formData: FormData) {
     eventId: formData.get("eventId"),
     inviteId: formData.get("inviteId"),
     inviteCopy: formData.get("inviteCopy"),
+    isPublic: formData.get("isPublic") ?? "false",
     designJson: formData.get("designJson")?.toString(),
   });
 
@@ -450,7 +316,7 @@ export async function saveInviteAction(formData: FormData) {
       .update({
         design_json: designJson,
         invite_copy: parsed.data.inviteCopy,
-        is_public: true,
+        is_public: parsed.data.isPublic === "true",
       })
       .eq("id", parsed.data.inviteId),
     supabase
@@ -554,137 +420,6 @@ export async function addGuestAction(formData: FormData) {
   revalidatePath(`/events/${parsed.data.eventId}`);
   revalidatePath(`/events/${parsed.data.eventId}/guests`);
   revalidatePath("/dashboard");
-}
-
-export async function importGuestsAction(
-  _prevState: GuestImportActionState,
-  formData: FormData,
-): Promise<GuestImportActionState> {
-  try {
-    const { supabase } = await requireUser();
-    const eventId = z.string().uuid().parse(formData.get("eventId"));
-    const file = formData.get("guestCsv");
-
-    if (!(file instanceof File) || file.size === 0) {
-      return {
-        error: "Upload a CSV file with your guest list.",
-      };
-    }
-
-    const csvText = await file.text();
-    const { validRows, rowErrors } = parseGuestImportCsv(csvText);
-    const { error } = await supabase.from("guests").insert(
-      validRows.map((guest) => ({
-        event_id: eventId,
-        name: guest.name,
-        email: guest.email || null,
-        phone: guest.phone?.trim() || null,
-        plus_one_count: guest.plusOneCount,
-      })),
-    );
-
-    if (error) {
-      return {
-        error: `Couldn't import the guest list yet. ${error.message}`,
-      };
-    }
-
-    revalidatePath(`/events/${eventId}`);
-    revalidatePath(`/events/${eventId}/guests`);
-    revalidatePath(`/events/${eventId}/invite`);
-    revalidatePath("/dashboard");
-
-    return {
-      success:
-        rowErrors.length > 0
-          ? `Imported ${validRows.length} guest${validRows.length === 1 ? "" : "s"} and skipped ${rowErrors.length} row${rowErrors.length === 1 ? "" : "s"}.`
-          : `Imported ${validRows.length} guest${validRows.length === 1 ? "" : "s"}.`,
-      importedCount: validRows.length,
-      skippedCount: rowErrors.length,
-      rowErrors,
-    };
-  } catch (error) {
-    return {
-      error: error instanceof Error ? error.message : "Guest import failed.",
-    };
-  }
-}
-
-export async function bulkGuestAction(
-  _prevState: BulkGuestActionState,
-  formData: FormData,
-): Promise<BulkGuestActionState> {
-  const { supabase } = await requireUser();
-  const parsed = bulkGuestActionSchema.safeParse({
-    eventId: formData.get("eventId"),
-    guestIds: formData.getAll("guestIds"),
-    bulkActionType: formData.get("bulkActionType"),
-  });
-
-  if (!parsed.success) {
-    return {
-      error: parsed.error.issues[0]?.message ?? "Select guests before applying a bulk action.",
-    };
-  }
-
-  const { eventId, guestIds, bulkActionType } = parsed.data;
-
-  if (bulkActionType === "delete") {
-    const { error } = await supabase.from("guests").delete().eq("event_id", eventId).in("id", guestIds);
-
-    if (error) {
-      return {
-        error: `Couldn't remove the selected guests yet. ${error.message}`,
-      };
-    }
-
-    revalidatePath(`/events/${eventId}`);
-    revalidatePath(`/events/${eventId}/guests`);
-    revalidatePath(`/events/${eventId}/invite`);
-    revalidatePath("/dashboard");
-
-    return {
-      success: `Removed ${guestIds.length} guest${guestIds.length === 1 ? "" : "s"}.`,
-      affectedCount: guestIds.length,
-    };
-  }
-
-  const updates: { status: "pending" | "confirmed" | "declined"; plus_one_count?: number } = {
-    status: bulkActionType,
-  };
-
-  if (bulkActionType !== "confirmed") {
-    updates.plus_one_count = 0;
-  }
-
-  const { error } = await supabase
-    .from("guests")
-    .update(updates)
-    .eq("event_id", eventId)
-    .in("id", guestIds);
-
-  if (error) {
-    return {
-      error: `Couldn't update the selected guests yet. ${error.message}`,
-    };
-  }
-
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath(`/events/${eventId}/guests`);
-  revalidatePath(`/events/${eventId}/invite`);
-  revalidatePath("/dashboard");
-
-  const actionLabel =
-    bulkActionType === "confirmed"
-      ? "Marked"
-      : bulkActionType === "declined"
-        ? "Declined"
-        : "Reset";
-
-  return {
-    success: `${actionLabel} ${guestIds.length} guest${guestIds.length === 1 ? "" : "s"}.`,
-    affectedCount: guestIds.length,
-  };
 }
 
 export async function updateGuestAction(formData: FormData) {
@@ -815,64 +550,6 @@ export async function deleteShoppingItemAction(formData: FormData) {
 
   await supabase.from("shopping_items").delete().eq("id", parsed.data.itemId);
   await updateShoppingListEstimate(supabase, parsed.data.shoppingListId);
-
-  revalidatePath(`/events/${parsed.data.eventId}`);
-  revalidatePath(`/events/${parsed.data.eventId}/shopping`);
-  revalidatePath("/dashboard");
-}
-
-export async function replaceShoppingItemAction(formData: FormData) {
-  const { supabase, user } = await requireUser();
-  const parsed = replaceShoppingItemSchema.safeParse({
-    eventId: formData.get("eventId"),
-    shoppingListId: formData.get("shoppingListId"),
-    itemId: formData.get("itemId"),
-    feedback: formData.get("feedback") || "general",
-  });
-
-  if (!parsed.success) return;
-
-  const limit = await enforceAiLimits(supabase, {
-    userId: user.id,
-    eventId: parsed.data.eventId,
-    generationType: "shopping_list_transform",
-  });
-
-  if (!limit.allowed) {
-    return;
-  }
-
-  const result = await replaceShoppingItemForEvent(
-    supabase,
-    parsed.data.eventId,
-    parsed.data.itemId,
-    parsed.data.feedback,
-  );
-
-  await Promise.all([
-    trackAnalyticsEvent(supabase, {
-      eventName: "shopping_pick_replaced",
-      userId: user.id,
-      eventId: parsed.data.eventId,
-        metadata: {
-          source: "replace_pick",
-          feedback: parsed.data.feedback,
-          item_id: parsed.data.itemId,
-          replacement_name: result.itemName,
-        },
-    }),
-    createAuditLog(supabase, {
-      action: "shopping_item_replaced",
-      userId: user.id,
-      eventId: parsed.data.eventId,
-        metadata: {
-          item_id: parsed.data.itemId,
-          feedback: parsed.data.feedback,
-          replacement_name: result.itemName,
-          estimated_total: result.estimatedTotal,
-        },
-    }),
-  ]);
 
   revalidatePath(`/events/${parsed.data.eventId}`);
   revalidatePath(`/events/${parsed.data.eventId}/shopping`);

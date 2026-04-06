@@ -18,17 +18,6 @@ const sections = [
   { href: "/", label: "Marketing", icon: Sparkles },
 ];
 
-const eventSections = [
-  { key: "overview", href: "", label: "Overview" },
-  { key: "invite", href: "/invite", label: "Invite" },
-  { key: "guests", href: "/guests/add", label: "Guests" },
-  { key: "shopping", href: "/shopping", label: "Shopping" },
-  { key: "timeline", href: "/timeline", label: "Timeline" },
-  { key: "settings", href: "/settings", label: "Settings" },
-] as const;
-
-type EventNavKey = (typeof eventSections)[number]["key"];
-
 type AppShellProps = {
   title: string;
   description: string;
@@ -36,12 +25,6 @@ type AppShellProps = {
   actions?: ReactNode;
   backHref?: string;
   backLabel?: string;
-  currentSection?: string;
-  eventNav?: {
-    eventId: string;
-    eventTitle?: string;
-    active: EventNavKey;
-  };
 };
 
 export async function AppShell({
@@ -51,24 +34,11 @@ export async function AppShell({
   actions,
   backHref,
   backLabel = "Back to event overview",
-  currentSection,
-  eventNav,
 }: AppShellProps) {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const { data: profile } = user
-    ? await supabase
-        .from("profiles")
-        .select("plan_tier")
-        .eq("id", user.id)
-        .maybeSingle<{ plan_tier: string | null }>()
-    : { data: null };
-  const visibleSections =
-    profile?.plan_tier === "admin"
-      ? [...sections, { href: "/admin", label: "Admin", icon: Sparkles }]
-      : sections;
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -81,13 +51,12 @@ export async function AppShell({
           />
         </div>
         <nav className="mt-6 space-y-2">
-          {visibleSections.map((section) => (
+          {sections.map((section) => (
             <Link
               key={section.href}
               href={section.href}
               className={cn(
                 "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-ink-muted transition hover:bg-white/45 hover:text-ink",
-                currentSection === section.href && "bg-white/55 text-ink shadow-[0_12px_24px_rgba(101,85,176,0.12)]",
               )}
             >
               <section.icon className="size-4 text-brand" />
@@ -95,32 +64,6 @@ export async function AppShell({
             </Link>
           ))}
         </nav>
-        {eventNav ? (
-          <div className="mt-6 rounded-[1.75rem] border border-white/70 bg-white/35 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-ink-muted">Current event</p>
-            <p className="mt-2 text-sm font-semibold text-ink">{eventNav.eventTitle ?? "Event workspace"}</p>
-            <nav className="mt-4 space-y-2">
-              {eventSections.map((section) => {
-                const href = `/events/${eventNav.eventId}${section.href}`;
-                const isActive = eventNav.active === section.key;
-
-                return (
-                  <Link
-                    key={section.key}
-                    href={href}
-                    className={cn(
-                      "flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-medium text-ink-muted transition hover:bg-white/55 hover:text-ink",
-                      isActive && "bg-white/70 text-ink shadow-[0_12px_24px_rgba(101,85,176,0.14)]",
-                    )}
-                  >
-                    <span>{section.label}</span>
-                    {isActive ? <span className="text-xs uppercase tracking-[0.18em] text-brand">Now</span> : null}
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-        ) : null}
         <div className="mt-auto rounded-3xl bg-[linear-gradient(135deg,_rgba(38,146,255,0.96),_rgba(139,70,255,0.92))] px-4 py-5 text-white">
           <p className="text-sm uppercase tracking-[0.18em] text-white/70">AI host operating system</p>
           <p className="mt-2 text-lg font-semibold">Plan, invite, track, and execute</p>
