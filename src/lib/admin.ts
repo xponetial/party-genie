@@ -115,6 +115,51 @@ type AdminNoteRow = {
   created_at: string;
 };
 
+type SocialMediaBrandProfileRow = {
+  id: string;
+  scope: "default";
+  tone: string;
+  audience: string;
+  signature_phrases: string;
+  cta_style: string;
+  posting_goal_per_week: number;
+  focus_metrics: string;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type SocialMediaCampaignRow = {
+  id: string;
+  theme: string;
+  audience: string;
+  objective: string;
+  status: "draft" | "in_review" | "approved" | "scheduled" | "published";
+  priority: "low" | "medium" | "high";
+  source_event_type: string | null;
+  scheduled_week_of: string | null;
+  notes: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type SocialMediaContentItemRow = {
+  id: string;
+  campaign_id: string;
+  channel: "tiktok" | "pinterest" | "instagram" | "email" | "landing_page";
+  title: string;
+  format_detail: string;
+  status: "draft" | "in_review" | "approved" | "scheduled" | "published";
+  publish_on: string | null;
+  copy: string;
+  call_to_action: string;
+  hashtags: string;
+  visual_direction: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AdminActivityItem = {
   id: string;
   kind: "analytics" | "audit";
@@ -367,6 +412,60 @@ export type AdminIntegrationStatus = {
     label: string;
     status: "healthy" | "partial" | "missing";
     detail: string;
+  }>;
+};
+
+export type AdminSocialMediaData = {
+  brandProfile: {
+    id: string;
+    tone: string;
+    audience: string;
+    signaturePhrases: string;
+    ctaStyle: string;
+    postingGoalPerWeek: number;
+    focusMetrics: string;
+    updatedAt: string;
+    updatedByEmail: string | null;
+    updatedByName: string | null;
+  };
+  metrics: {
+    campaigns: number;
+    contentItems: number;
+    scheduledItems: number;
+    publishedItems: number;
+    approvalQueue: number;
+    postingGoalPerWeek: number;
+  };
+  campaigns: Array<{
+    id: string;
+    theme: string;
+    audience: string;
+    objective: string;
+    status: SocialMediaCampaignRow["status"];
+    priority: SocialMediaCampaignRow["priority"];
+    sourceEventType: string | null;
+    scheduledWeekOf: string | null;
+    notes: string;
+    createdAt: string;
+    updatedAt: string;
+    createdByEmail: string | null;
+    createdByName: string | null;
+    contentCount: number;
+  }>;
+  contentItems: Array<{
+    id: string;
+    campaignId: string;
+    campaignTheme: string;
+    channel: SocialMediaContentItemRow["channel"];
+    title: string;
+    formatDetail: string;
+    status: SocialMediaContentItemRow["status"];
+    publishOn: string | null;
+    copy: string;
+    callToAction: string;
+    hashtags: string;
+    visualDirection: string;
+    updatedAt: string;
   }>;
 };
 
@@ -1269,6 +1368,117 @@ export async function getAdminSupportData(): Promise<AdminSupportData> {
       .filter((entry) => entry.aiFailureCount > 0 || entry.deliveryCount > 0)
       .sort((a, b) => b.aiFailureCount - a.aiFailureCount || b.deliveryCount - a.deliveryCount)
       .slice(0, 8),
+  };
+}
+
+export async function getAdminSocialMediaData(): Promise<AdminSocialMediaData> {
+  const supabase = createSupabaseAdminClient();
+  const [
+    authUsers,
+    { data: profiles = [] },
+    { data: brandProfile },
+    { data: campaigns = [] },
+    { data: contentItems = [] },
+  ] = await Promise.all([
+    listAuthUsers(),
+    supabase.from("profiles").select("id, full_name, plan_tier, phone, created_at").returns<AdminProfile[]>(),
+    supabase
+      .from("social_media_brand_profiles")
+      .select("id, scope, tone, audience, signature_phrases, cta_style, posting_goal_per_week, focus_metrics, updated_by, created_at, updated_at")
+      .eq("scope", "default")
+      .maybeSingle<SocialMediaBrandProfileRow>(),
+    supabase
+      .from("social_media_campaigns")
+      .select("id, theme, audience, objective, status, priority, source_event_type, scheduled_week_of, notes, created_by, created_at, updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(12)
+      .returns<SocialMediaCampaignRow[]>(),
+    supabase
+      .from("social_media_content_items")
+      .select("id, campaign_id, channel, title, format_detail, status, publish_on, copy, call_to_action, hashtags, visual_direction, created_at, updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(16)
+      .returns<SocialMediaContentItemRow[]>(),
+  ]);
+
+  const authByUser = new Map(authUsers.map((user) => [user.id, user] as const));
+  const profileByUser = new Map((profiles ?? []).map((profile) => [profile.id, profile] as const));
+  const campaignById = new Map((campaigns ?? []).map((campaign) => [campaign.id, campaign] as const));
+  const contentCountByCampaign = (contentItems ?? []).reduce<Map<string, number>>((map, item) => {
+    map.set(item.campaign_id, (map.get(item.campaign_id) ?? 0) + 1);
+    return map;
+  }, new Map());
+
+  const fallbackProfile = {
+    id: "default",
+    scope: "default",
+    tone: "",
+    audience: "",
+    signature_phrases: "",
+    cta_style: "",
+    posting_goal_per_week: 12,
+    focus_metrics: "engagement rate, ctr, conversions, posts per week",
+    updated_by: null,
+    created_at: new Date(0).toISOString(),
+    updated_at: new Date(0).toISOString(),
+  } satisfies SocialMediaBrandProfileRow;
+
+  const resolvedProfile = brandProfile ?? fallbackProfile;
+  const allCampaigns = campaigns ?? [];
+  const allContentItems = contentItems ?? [];
+
+  return {
+    brandProfile: {
+      id: resolvedProfile.id,
+      tone: resolvedProfile.tone,
+      audience: resolvedProfile.audience,
+      signaturePhrases: resolvedProfile.signature_phrases,
+      ctaStyle: resolvedProfile.cta_style,
+      postingGoalPerWeek: resolvedProfile.posting_goal_per_week,
+      focusMetrics: resolvedProfile.focus_metrics,
+      updatedAt: resolvedProfile.updated_at,
+      updatedByEmail: resolvedProfile.updated_by ? authByUser.get(resolvedProfile.updated_by)?.email ?? null : null,
+      updatedByName: resolvedProfile.updated_by ? profileByUser.get(resolvedProfile.updated_by)?.full_name ?? null : null,
+    },
+    metrics: {
+      campaigns: allCampaigns.length,
+      contentItems: allContentItems.length,
+      scheduledItems: allContentItems.filter((item) => item.status === "scheduled").length,
+      publishedItems: allContentItems.filter((item) => item.status === "published").length,
+      approvalQueue: allCampaigns.filter((item) => item.status === "in_review").length,
+      postingGoalPerWeek: resolvedProfile.posting_goal_per_week,
+    },
+    campaigns: allCampaigns.map((campaign) => ({
+      id: campaign.id,
+      theme: campaign.theme,
+      audience: campaign.audience,
+      objective: campaign.objective,
+      status: campaign.status,
+      priority: campaign.priority,
+      sourceEventType: campaign.source_event_type,
+      scheduledWeekOf: campaign.scheduled_week_of,
+      notes: campaign.notes,
+      createdAt: campaign.created_at,
+      updatedAt: campaign.updated_at,
+      createdByEmail: authByUser.get(campaign.created_by)?.email ?? null,
+      createdByName: profileByUser.get(campaign.created_by)?.full_name ?? null,
+      contentCount: contentCountByCampaign.get(campaign.id) ?? 0,
+    })),
+    contentItems: allContentItems.map((item) => ({
+      id: item.id,
+      campaignId: item.campaign_id,
+      campaignTheme: campaignById.get(item.campaign_id)?.theme ?? "Campaign",
+      channel: item.channel,
+      title: item.title,
+      formatDetail: item.format_detail,
+      status: item.status,
+      publishOn: item.publish_on,
+      copy: item.copy,
+      callToAction: item.call_to_action,
+      hashtags: item.hashtags,
+      visualDirection: item.visual_direction,
+      updatedAt: item.updated_at,
+    })),
   };
 }
 

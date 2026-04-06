@@ -32,6 +32,11 @@ const laneLinks = [
   { href: "/admin/users", label: "Users", detail: "Plans, usage, and support-ready account detail." },
   { href: "/admin/events", label: "Events", detail: "Live host workspaces and invite delivery health." },
   { href: "/admin/templates", label: "Templates", detail: "Catalog visibility with real previews and controls." },
+  {
+    href: "/admin/social-media",
+    label: "Social Media",
+    detail: "Campaign builder, approval workflow, calendar, and brand voice direction.",
+  },
 ] as const;
 
 export default async function AdminOverviewPage({
