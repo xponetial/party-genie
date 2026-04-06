@@ -1,6 +1,4 @@
-import { AppShell } from "@/components/layout/app-shell";
-import { GuestListCard } from "@/components/guests/guest-list-card";
-import { getEventContext } from "@/lib/events";
+import { EventGuestsWorkspace } from "@/components/guests/event-guests-workspace";
 
 export default async function EventGuestsPage({
   params,
@@ -8,15 +6,5 @@ export default async function EventGuestsPage({
   params: Promise<{ eventId: string }>;
 }) {
   const { eventId } = await params;
-  const { guests, invite, guestMessages } = await getEventContext(eventId);
-
-  return (
-    <AppShell
-      title="Guest management"
-      description="Track guest status, add and import attendees, and keep RSVP communication organized."
-      backHref={`/events/${eventId}`}
-    >
-      <GuestListCard eventId={eventId} guests={guests} invite={invite} guestMessages={guestMessages} />
-    </AppShell>
-  );
+  return <EventGuestsWorkspace eventId={eventId} section="all" />;
 }
