@@ -21,6 +21,7 @@ import {
   deleteSocialMediaCampaignAction,
   duplicateSocialMediaCampaignAction,
   generateSocialMediaCampaignAction,
+  planSocialMediaCampaignScheduleAction,
   regenerateSocialMediaCampaignAction,
   regenerateSocialMediaContentItemAction,
   rescheduleSocialMediaContentItemAction,
@@ -28,6 +29,7 @@ import {
   updateSocialMediaCampaignStatusAction,
   updateSocialMediaContentItemAction,
   updateSocialMediaContentStatusAction,
+  updateSocialMediaPerformanceAction,
 } from "@/app/admin/actions";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { DashboardMetricCard } from "@/components/dashboard/dashboard-metric-card";
@@ -102,6 +104,8 @@ export default async function AdminSocialMediaPage({
     contentStatus?: string;
     channel?: string;
     view?: string;
+    flash?: string;
+    message?: string;
   }>;
 }) {
   const resolved = await searchParams;
@@ -168,6 +172,32 @@ export default async function AdminSocialMediaPage({
     .slice(0, 16);
 
   const visibleArchivedCount = filteredItems.filter((item) => item.status === "archived").length;
+  const currentParams = new URLSearchParams();
+
+  if (resolved.q) currentParams.set("q", resolved.q);
+  if (campaignStatus !== "all") currentParams.set("campaignStatus", campaignStatus);
+  if (contentStatus !== "all") currentParams.set("contentStatus", contentStatus);
+  if (channel !== "all") currentParams.set("channel", channel);
+  if (view !== "active") currentParams.set("view", view);
+
+  const currentReturnTo = currentParams.size ? `/admin/social-media?${currentParams.toString()}` : "/admin/social-media";
+  const flashKind = resolved.flash === "error" ? "error" : resolved.flash === "success" ? "success" : null;
+  const performanceTotals = filteredItems.reduce(
+    (totals, item) => {
+      totals.impressions += item.manualImpressions;
+      totals.clicks += item.manualClicks;
+      totals.conversions += item.manualConversions;
+      totals.revenue += item.manualRevenueUsd;
+      return totals;
+    },
+    { impressions: 0, clicks: 0, conversions: 0, revenue: 0 },
+  );
+  const performanceCtr = performanceTotals.impressions
+    ? Math.round((performanceTotals.clicks / performanceTotals.impressions) * 1000) / 10
+    : 0;
+  const performanceConversionRate = performanceTotals.clicks
+    ? Math.round((performanceTotals.conversions / performanceTotals.clicks) * 1000) / 10
+    : 0;
 
   return (
     <AdminShell
@@ -176,6 +206,18 @@ export default async function AdminSocialMediaPage({
       description="Generate campaigns from a theme, edit drafts, manage assets, schedule content, and run the review workflow from one admin surface."
       adminName={profile?.full_name}
     >
+      {flashKind && resolved.message ? (
+        <div
+          className={`rounded-3xl border px-5 py-4 text-sm ${
+            flashKind === "success"
+              ? "border-[rgba(51,191,114,0.28)] bg-[rgba(235,255,244,0.95)] text-[#106a39]"
+              : "border-[rgba(214,72,112,0.24)] bg-[rgba(255,244,247,0.95)] text-[#9f1f43]"
+          }`}
+        >
+          {resolved.message}
+        </div>
+      ) : null}
+
       <div className="grid gap-4 xl:grid-cols-4">
         <DashboardMetricCard detail="Active campaigns." icon={Megaphone} label="Campaigns" value={String(social.metrics.campaigns)} />
         <DashboardMetricCard detail="Drafts across active campaigns." icon={FileClock} label="Content items" value={String(social.metrics.contentItems)} />
@@ -270,6 +312,7 @@ export default async function AdminSocialMediaPage({
       <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <DashboardPanel title="Brand voice" description="The tone system all generated social drafts should follow.">
           <form action={updateSocialMediaBrandProfileAction} className="grid gap-4">
+            <input name="returnTo" type="hidden" value={currentReturnTo} />
             <div className="grid gap-4 md:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="tone">Tone</Label>
@@ -312,6 +355,7 @@ export default async function AdminSocialMediaPage({
         <div className="grid gap-4">
           <DashboardPanel title="Generate from theme" description="Use AI to create a campaign plus channel drafts in one step.">
             <form action={generateSocialMediaCampaignAction} className="grid gap-4">
+              <input name="returnTo" type="hidden" value={currentReturnTo} />
               <div className="grid gap-2">
                 <Label htmlFor="generate-theme">Party theme</Label>
                 <Input id="generate-theme" name="theme" placeholder="Backyard birthday brunch with cheerful spring colors" required />
@@ -345,6 +389,7 @@ export default async function AdminSocialMediaPage({
 
           <DashboardPanel title="Manual campaign" description="Create a campaign by hand when you want tighter control before drafting.">
             <form action={createSocialMediaCampaignAction} className="grid gap-4">
+              <input name="returnTo" type="hidden" value={currentReturnTo} />
               <div className="grid gap-2">
                 <Label htmlFor="manual-theme">Party theme</Label>
                 <Input id="manual-theme" name="theme" placeholder="Summer pool party for busy moms" required />
@@ -441,6 +486,21 @@ export default async function AdminSocialMediaPage({
                 )}
               </div>
             </Surface>
+            <Surface>
+              <p className="text-xs uppercase tracking-[0.18em] text-ink-muted">Performance</p>
+              <p className="mt-3 text-sm text-ink-muted">
+                Impressions: <span className="font-semibold text-ink">{performanceTotals.impressions}</span>
+              </p>
+              <p className="mt-2 text-sm text-ink-muted">
+                CTR: <span className="font-semibold text-ink">{performanceCtr}%</span>
+              </p>
+              <p className="mt-2 text-sm text-ink-muted">
+                Conversion rate: <span className="font-semibold text-ink">{performanceConversionRate}%</span>
+              </p>
+              <p className="mt-2 text-sm text-ink-muted">
+                Revenue: <span className="font-semibold text-ink">{formatAdminCurrency(performanceTotals.revenue)}</span>
+              </p>
+            </Surface>
           </div>
         </DashboardPanel>
 
@@ -461,6 +521,7 @@ export default async function AdminSocialMediaPage({
                     </div>
                     <form action={rescheduleSocialMediaContentItemAction} className="grid gap-3 sm:grid-cols-[180px_auto]">
                       <input name="contentItemId" type="hidden" value={item.id} />
+                      <input name="returnTo" type="hidden" value={currentReturnTo} />
                       <Input defaultValue={item.publishOn ?? ""} name="publishOn" type="date" />
                       <SubmitButton pendingLabel="Rescheduling..." variant="secondary">
                         Save date
@@ -481,7 +542,8 @@ export default async function AdminSocialMediaPage({
       <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <DashboardPanel title="Content creator" description="Add a manual draft with asset-studio fields.">
           {campaignOptions.length ? (
-            <form action={createSocialMediaContentItemAction} className="grid gap-4">
+            <form action={createSocialMediaContentItemAction} className="grid gap-4" encType="multipart/form-data">
+              <input name="returnTo" type="hidden" value={currentReturnTo} />
               <div className="grid gap-2">
                 <Label htmlFor="campaignId">Campaign</Label>
                 <select className={selectClass} id="campaignId" name="campaignId">
@@ -543,6 +605,10 @@ export default async function AdminSocialMediaPage({
               <div className="grid gap-2">
                 <Label htmlFor="referenceLinks">Reference links</Label>
                 <textarea className={textAreaClass} id="referenceLinks" name="referenceLinks" />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="assetFile">Upload asset</Label>
+                <Input accept="image/png,image/jpeg,image/webp,image/gif" id="assetFile" name="assetFile" type="file" />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="copy">Draft copy</Label>
@@ -611,12 +677,14 @@ export default async function AdminSocialMediaPage({
                     <form action={updateSocialMediaCampaignStatusAction}>
                       <input name="campaignId" type="hidden" value={campaign.id} />
                       <input name="status" type="hidden" value="in_review" />
+                      <input name="returnTo" type="hidden" value={currentReturnTo} />
                       <SubmitButton className="w-full justify-center" pendingLabel="Saving..." variant="secondary">
                         Move to review
                       </SubmitButton>
                     </form>
                     <form action={regenerateSocialMediaCampaignAction}>
                       <input name="campaignId" type="hidden" value={campaign.id} />
+                      <input name="returnTo" type="hidden" value={currentReturnTo} />
                       <ConfirmSubmitButton
                         className="w-full justify-center"
                         confirmMessage={`Regenerate ${campaign.theme}? This will replace the campaign draft set with fresh AI outputs.`}
@@ -629,6 +697,7 @@ export default async function AdminSocialMediaPage({
                     </form>
                     <form action={duplicateSocialMediaCampaignAction}>
                       <input name="campaignId" type="hidden" value={campaign.id} />
+                      <input name="returnTo" type="hidden" value={currentReturnTo} />
                       <SubmitButton className="w-full justify-center" pendingLabel="Duplicating..." variant="secondary">
                         <CopyPlus className="size-4" />
                         Duplicate
@@ -637,6 +706,7 @@ export default async function AdminSocialMediaPage({
                     <form action={bulkUpdateSocialMediaCampaignContentStatusAction}>
                       <input name="campaignId" type="hidden" value={campaign.id} />
                       <input name="status" type="hidden" value="approved" />
+                      <input name="returnTo" type="hidden" value={currentReturnTo} />
                       <SubmitButton className="w-full justify-center" pendingLabel="Approving..." variant="secondary">
                         Approve all
                       </SubmitButton>
@@ -644,12 +714,14 @@ export default async function AdminSocialMediaPage({
                     <form action={bulkUpdateSocialMediaCampaignContentStatusAction}>
                       <input name="campaignId" type="hidden" value={campaign.id} />
                       <input name="status" type="hidden" value="scheduled" />
+                      <input name="returnTo" type="hidden" value={currentReturnTo} />
                       <SubmitButton className="w-full justify-center" pendingLabel="Scheduling..." variant="secondary">
                         Schedule all
                       </SubmitButton>
                     </form>
                     <form action={archiveSocialMediaCampaignAction}>
                       <input name="campaignId" type="hidden" value={campaign.id} />
+                      <input name="returnTo" type="hidden" value={currentReturnTo} />
                       <ConfirmSubmitButton
                         className="w-full justify-center rounded-2xl border border-border bg-white text-ink shadow-none hover:bg-white"
                         confirmMessage={`Archive ${campaign.theme}? The campaign will move out of the active queue, but stay available for reference.`}
@@ -661,6 +733,7 @@ export default async function AdminSocialMediaPage({
                     </form>
                     <form action={deleteSocialMediaCampaignAction} className="sm:col-span-2">
                       <input name="campaignId" type="hidden" value={campaign.id} />
+                      <input name="returnTo" type="hidden" value={currentReturnTo} />
                       <ConfirmSubmitButton
                         className="w-full justify-center rounded-2xl border border-[rgba(214,72,112,0.25)] bg-[rgba(255,255,255,0.9)] text-[#b42345] shadow-none hover:bg-[rgba(255,240,245,1)]"
                         confirmMessage={`Delete ${campaign.theme}? This permanently removes the campaign and all linked drafts.`}
@@ -671,6 +744,14 @@ export default async function AdminSocialMediaPage({
                       </ConfirmSubmitButton>
                     </form>
                   </div>
+                  <form action={planSocialMediaCampaignScheduleAction} className="mt-4 grid gap-3 rounded-3xl bg-canvas p-4 md:grid-cols-[200px_auto]">
+                    <input name="campaignId" type="hidden" value={campaign.id} />
+                    <input name="returnTo" type="hidden" value={currentReturnTo} />
+                    <Input defaultValue={campaign.scheduledWeekOf ?? ""} name="scheduledWeekOf" type="date" />
+                    <SubmitButton pendingLabel="Planning calendar..." variant="secondary">
+                      Plan campaign week
+                    </SubmitButton>
+                  </form>
                 </div>
               </Surface>
             ))
@@ -706,6 +787,7 @@ export default async function AdminSocialMediaPage({
                     </div>
                     <form action={updateSocialMediaContentStatusAction} className="grid gap-3 rounded-3xl bg-canvas p-4 sm:grid-cols-[1fr_auto]">
                       <input name="contentItemId" type="hidden" value={item.id} />
+                      <input name="returnTo" type="hidden" value={currentReturnTo} />
                       <select className={selectClass} defaultValue={item.status} name="status">
                         <option value="draft">Draft</option>
                         <option value="in_review">In review</option>
@@ -722,9 +804,10 @@ export default async function AdminSocialMediaPage({
                 </summary>
 
                 <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_auto]">
-                  <form action={updateSocialMediaContentItemAction} className="grid gap-4">
+                  <form action={updateSocialMediaContentItemAction} className="grid gap-4" encType="multipart/form-data">
                     <input name="contentItemId" type="hidden" value={item.id} />
                     <input name="status" type="hidden" value={item.status} />
+                    <input name="returnTo" type="hidden" value={currentReturnTo} />
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="grid gap-2">
                         <Label htmlFor={`title-${item.id}`}>Title</Label>
@@ -769,6 +852,25 @@ export default async function AdminSocialMediaPage({
                       <Label htmlFor={`links-${item.id}`}>Reference links</Label>
                       <textarea className={textAreaClass} defaultValue={item.referenceLinks} id={`links-${item.id}`} name="referenceLinks" />
                     </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor={`asset-file-${item.id}`}>Replace asset</Label>
+                      <Input accept="image/png,image/jpeg,image/webp,image/gif" id={`asset-file-${item.id}`} name="assetFile" type="file" />
+                    </div>
+                    {item.assetPublicUrl ? (
+                      <div className="rounded-3xl border border-border bg-canvas p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-ink-muted">Stored asset</p>
+                        <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img alt={`${item.title} asset`} className="h-24 w-24 rounded-2xl object-cover" src={item.assetPublicUrl} />
+                          <div className="min-w-0">
+                            <p className="font-semibold text-ink">{item.assetFileName || "Uploaded asset"}</p>
+                            <a className="mt-1 block break-all text-sm text-brand underline-offset-2 hover:underline" href={item.assetPublicUrl} rel="noreferrer" target="_blank">
+                              Open asset
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                     <SubmitButton pendingLabel="Saving item..." variant="secondary">
                       Save edits
                     </SubmitButton>
@@ -776,6 +878,7 @@ export default async function AdminSocialMediaPage({
                   <div className="grid gap-3">
                     <form action={regenerateSocialMediaContentItemAction}>
                       <input name="contentItemId" type="hidden" value={item.id} />
+                      <input name="returnTo" type="hidden" value={currentReturnTo} />
                       <ConfirmSubmitButton
                         className="w-full justify-center"
                         confirmMessage={`Regenerate ${item.title}? This replaces the current draft copy with a fresh AI pass.`}
@@ -788,10 +891,44 @@ export default async function AdminSocialMediaPage({
                     </form>
                     <form action={rescheduleSocialMediaContentItemAction} className="grid gap-3 rounded-3xl bg-canvas p-4">
                       <input name="contentItemId" type="hidden" value={item.id} />
+                      <input name="returnTo" type="hidden" value={currentReturnTo} />
                       <Label htmlFor={`planner-${item.id}`}>Quick reschedule</Label>
                       <Input defaultValue={item.publishOn ?? ""} id={`planner-${item.id}`} name="publishOn" type="date" />
                       <SubmitButton className="w-full justify-center" pendingLabel="Rescheduling..." variant="secondary">
                         Save publish date
+                      </SubmitButton>
+                    </form>
+                    <form action={updateSocialMediaPerformanceAction} className="grid gap-3 rounded-3xl bg-canvas p-4">
+                      <input name="contentItemId" type="hidden" value={item.id} />
+                      <input name="returnTo" type="hidden" value={currentReturnTo} />
+                      <div className="grid gap-2">
+                        <Label htmlFor={`published-url-${item.id}`}>Published URL</Label>
+                        <Input defaultValue={item.publishedUrl} id={`published-url-${item.id}`} name="publishedUrl" placeholder="https://www.instagram.com/p/..." />
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="grid gap-2">
+                          <Label htmlFor={`impressions-${item.id}`}>Impressions</Label>
+                          <Input defaultValue={item.manualImpressions} id={`impressions-${item.id}`} min={0} name="manualImpressions" type="number" />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor={`clicks-${item.id}`}>Clicks</Label>
+                          <Input defaultValue={item.manualClicks} id={`clicks-${item.id}`} min={0} name="manualClicks" type="number" />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor={`conversions-${item.id}`}>Conversions</Label>
+                          <Input defaultValue={item.manualConversions} id={`conversions-${item.id}`} min={0} name="manualConversions" type="number" />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor={`revenue-${item.id}`}>Revenue</Label>
+                          <Input defaultValue={item.manualRevenueUsd} id={`revenue-${item.id}`} min={0} name="manualRevenueUsd" step="0.01" type="number" />
+                        </div>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor={`performance-notes-${item.id}`}>Performance notes</Label>
+                        <textarea className={textAreaClass} defaultValue={item.performanceNotes} id={`performance-notes-${item.id}`} name="performanceNotes" />
+                      </div>
+                      <SubmitButton className="w-full justify-center" pendingLabel="Saving metrics..." variant="secondary">
+                        Save performance
                       </SubmitButton>
                     </form>
                   </div>

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   generateSocialCampaign,
@@ -10,6 +11,7 @@ import {
   type SocialBrandProfileContext,
 } from "@/lib/ai/party-genie";
 import { requireAdminAccess } from "@/lib/admin";
+import { uploadSocialMediaAsset } from "@/lib/social-media-assets";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const planTierSchema = z.object({
@@ -128,9 +130,50 @@ const socialMediaRegenerateContentSchema = z.object({
   contentItemId: z.string().uuid(),
 });
 
+const socialMediaPlanCampaignScheduleSchema = z.object({
+  campaignId: z.string().uuid(),
+  scheduledWeekOf: z.string().trim().optional(),
+});
+
+const socialMediaPerformanceSchema = z.object({
+  contentItemId: z.string().uuid(),
+  publishedUrl: z.string().trim().max(2000).optional(),
+  manualImpressions: z.coerce.number().int().min(0).max(10_000_000),
+  manualClicks: z.coerce.number().int().min(0).max(10_000_000),
+  manualConversions: z.coerce.number().int().min(0).max(10_000_000),
+  manualRevenueUsd: z.coerce.number().min(0).max(1_000_000),
+  performanceNotes: z.string().trim().max(2000).optional(),
+});
+
 function revalidateSocialMediaPaths() {
   revalidatePath("/admin");
   revalidatePath("/admin/social-media");
+}
+
+function resolveSocialReturnTo(formData: FormData) {
+  const value = formData.get("returnTo");
+
+  if (typeof value !== "string" || !value.startsWith("/admin/social-media")) {
+    return "/admin/social-media";
+  }
+
+  return value;
+}
+
+function appendSocialFlash(pathname: string, kind: "success" | "error", message: string) {
+  const [basePath, queryString = ""] = pathname.split("?");
+  const params = new URLSearchParams(queryString);
+  params.set("flash", kind);
+  params.set("message", message);
+  return `${basePath}?${params.toString()}`;
+}
+
+function finalizeSocialAction(returnTo: string, successMessage: string, error: unknown) {
+  if (error instanceof Error) {
+    redirect(appendSocialFlash(returnTo, "error", error.message));
+  }
+
+  redirect(appendSocialFlash(returnTo, "success", successMessage));
 }
 
 function currentUsageMonth() {
@@ -264,6 +307,55 @@ function buildPublishDate(weekOf: string | null, publishOffsetDays: number) {
 
   base.setUTCDate(base.getUTCDate() + publishOffsetDays);
   return base.toISOString().slice(0, 10);
+}
+
+const SOCIAL_CHANNEL_PLAN_ORDER: Record<
+  "tiktok" | "instagram" | "pinterest" | "email" | "landing_page",
+  number
+> = {
+  tiktok: 0,
+  instagram: 1,
+  pinterest: 2,
+  email: 3,
+  landing_page: 4,
+};
+
+function sortContentItemsForSchedule<
+  T extends { channel: "tiktok" | "pinterest" | "instagram" | "email" | "landing_page"; created_at?: string | null },
+>(items: T[]) {
+  return [...items].sort((a, b) => {
+    const orderDelta = SOCIAL_CHANNEL_PLAN_ORDER[a.channel] - SOCIAL_CHANNEL_PLAN_ORDER[b.channel];
+    if (orderDelta !== 0) return orderDelta;
+    return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+  });
+}
+
+async function maybeUploadSocialAsset({
+  campaignId,
+  contentItemId,
+  file,
+}: {
+  campaignId: string;
+  contentItemId: string;
+  file: FormDataEntryValue | null;
+}) {
+  if (!(file instanceof File) || file.size === 0) {
+    return null;
+  }
+
+  if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type)) {
+    throw new Error("Social assets must be JPG, PNG, WEBP, or GIF files.");
+  }
+
+  if (file.size > 8 * 1024 * 1024) {
+    throw new Error("Social assets must be 8MB or smaller.");
+  }
+
+  return uploadSocialMediaAsset({
+    campaignId,
+    contentItemId,
+    file,
+  });
 }
 
 async function loadSocialBrandProfile() {
@@ -411,6 +503,7 @@ export async function createAdminNoteAction(formData: FormData) {
 
 export async function updateSocialMediaBrandProfileAction(formData: FormData) {
   const admin = await requireAdminAccess();
+  const returnTo = resolveSocialReturnTo(formData);
   const parsed = socialMediaBrandProfileSchema.safeParse({
     tone: formData.get("tone"),
     audience: formData.get("audience"),
@@ -421,43 +514,57 @@ export async function updateSocialMediaBrandProfileAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid brand voice settings.");
+    redirect(
+      appendSocialFlash(
+        returnTo,
+        "error",
+        parsed.error.issues[0]?.message ?? "Invalid brand voice settings.",
+      ),
+    );
+  }
+  let failure: unknown = null;
+
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { error } = await supabase.from("social_media_brand_profiles").upsert(
+      {
+        scope: "default",
+        tone: parsed.data.tone,
+        audience: parsed.data.audience,
+        signature_phrases: parsed.data.signaturePhrases,
+        cta_style: parsed.data.ctaStyle,
+        posting_goal_per_week: parsed.data.postingGoalPerWeek,
+        focus_metrics: parsed.data.focusMetrics,
+        updated_by: admin.userId,
+      },
+      { onConflict: "scope" },
+    );
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    await logSocialMediaActivity({
+      action: "brand_profile_updated",
+      summary: "Updated the default social media brand voice.",
+      createdBy: admin.userId,
+      metadata: {
+        postingGoalPerWeek: parsed.data.postingGoalPerWeek,
+        focusMetrics: parsed.data.focusMetrics,
+      },
+    });
+
+    revalidateSocialMediaPaths();
+  } catch (error) {
+    failure = error;
   }
 
-  const supabase = createSupabaseAdminClient();
-  const { error } = await supabase.from("social_media_brand_profiles").upsert(
-    {
-      scope: "default",
-      tone: parsed.data.tone,
-      audience: parsed.data.audience,
-      signature_phrases: parsed.data.signaturePhrases,
-      cta_style: parsed.data.ctaStyle,
-      posting_goal_per_week: parsed.data.postingGoalPerWeek,
-      focus_metrics: parsed.data.focusMetrics,
-      updated_by: admin.userId,
-    },
-    { onConflict: "scope" },
-  );
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  await logSocialMediaActivity({
-    action: "brand_profile_updated",
-    summary: "Updated the default social media brand voice.",
-    createdBy: admin.userId,
-    metadata: {
-      postingGoalPerWeek: parsed.data.postingGoalPerWeek,
-      focusMetrics: parsed.data.focusMetrics,
-    },
-  });
-
-  revalidateSocialMediaPaths();
+  finalizeSocialAction(returnTo, "Saved the social brand voice.", failure);
 }
 
 export async function createSocialMediaCampaignAction(formData: FormData) {
   const admin = await requireAdminAccess();
+  const returnTo = resolveSocialReturnTo(formData);
   const parsed = socialMediaCampaignSchema.safeParse({
     theme: formData.get("theme"),
     audience: formData.get("audience"),
@@ -469,44 +576,52 @@ export async function createSocialMediaCampaignAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid social campaign.");
+    redirect(appendSocialFlash(returnTo, "error", parsed.error.issues[0]?.message ?? "Invalid social campaign."));
   }
+  let failure: unknown = null;
 
-  const supabase = createSupabaseAdminClient();
-  const scheduledWeekOf = parsed.data.scheduledWeekOf?.trim() || null;
-  const status = scheduledWeekOf ? "scheduled" : "draft";
-  const { error } = await supabase.from("social_media_campaigns").insert({
-    theme: parsed.data.theme,
-    audience: parsed.data.audience,
-    objective: parsed.data.objective,
-    priority: parsed.data.priority,
-    source_event_type: parsed.data.sourceEventType?.trim() || null,
-    scheduled_week_of: scheduledWeekOf,
-    notes: parsed.data.notes?.trim() || "",
-    status,
-    created_by: admin.userId,
-  });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  await logSocialMediaActivity({
-    action: "campaign_created",
-    summary: `Created campaign "${parsed.data.theme}".`,
-    createdBy: admin.userId,
-    metadata: {
+  try {
+    const supabase = createSupabaseAdminClient();
+    const scheduledWeekOf = parsed.data.scheduledWeekOf?.trim() || null;
+    const status = scheduledWeekOf ? "scheduled" : "draft";
+    const { error } = await supabase.from("social_media_campaigns").insert({
       theme: parsed.data.theme,
-      status,
+      audience: parsed.data.audience,
+      objective: parsed.data.objective,
       priority: parsed.data.priority,
-    },
-  });
+      source_event_type: parsed.data.sourceEventType?.trim() || null,
+      scheduled_week_of: scheduledWeekOf,
+      notes: parsed.data.notes?.trim() || "",
+      status,
+      created_by: admin.userId,
+    });
 
-  revalidateSocialMediaPaths();
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    await logSocialMediaActivity({
+      action: "campaign_created",
+      summary: `Created campaign "${parsed.data.theme}".`,
+      createdBy: admin.userId,
+      metadata: {
+        theme: parsed.data.theme,
+        status,
+        priority: parsed.data.priority,
+      },
+    });
+
+    revalidateSocialMediaPaths();
+  } catch (error) {
+    failure = error;
+  }
+
+  finalizeSocialAction(returnTo, `Created campaign "${parsed.data.theme}".`, failure);
 }
 
 export async function generateSocialMediaCampaignAction(formData: FormData) {
   const admin = await requireAdminAccess();
+  const returnTo = resolveSocialReturnTo(formData);
   const parsed = socialMediaGenerateCampaignSchema.safeParse({
     theme: formData.get("theme"),
     audienceHint: formData.get("audienceHint") || undefined,
@@ -516,102 +631,115 @@ export async function generateSocialMediaCampaignAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid campaign generation request.");
+    redirect(
+      appendSocialFlash(
+        returnTo,
+        "error",
+        parsed.error.issues[0]?.message ?? "Invalid campaign generation request.",
+      ),
+    );
+  }
+  let failure: unknown = null;
+
+  try {
+    const supabase = createSupabaseAdminClient();
+    const brandProfile = await loadSocialBrandProfile();
+
+    const generated = await generateSocialCampaign(
+      {
+        theme: parsed.data.theme,
+        audienceHint: parsed.data.audienceHint,
+        objectiveHint: parsed.data.objectiveHint,
+        sourceEventType: parsed.data.sourceEventType,
+      },
+      brandProfile,
+    );
+
+    const scheduledWeekOf = parsed.data.scheduledWeekOf?.trim() || null;
+    const { data: createdCampaign, error: campaignError } = await supabase
+      .from("social_media_campaigns")
+      .insert({
+        theme: parsed.data.theme,
+        audience: generated.audience,
+        objective: generated.objective,
+        priority: generated.priority,
+        source_event_type: generated.sourceEventType,
+        scheduled_week_of: scheduledWeekOf,
+        notes: generated.notes,
+        generation_summary: generated.rawResponse.summary ?? "",
+        status: "in_review",
+        created_by: admin.userId,
+      })
+      .select("id")
+      .single<{ id: string }>();
+
+    if (campaignError || !createdCampaign) {
+      throw new Error(campaignError?.message ?? "Unable to create generated campaign.");
+    }
+
+    const { error: contentError } = await supabase.from("social_media_content_items").insert(
+      generated.contentItems.map((item) => ({
+        campaign_id: createdCampaign.id,
+        channel: item.channel,
+        title: item.title,
+        format_detail: item.formatDetail,
+        status: "in_review",
+        publish_on: buildPublishDate(scheduledWeekOf, item.publishOffsetDays),
+        copy: item.copy,
+        call_to_action: item.callToAction,
+        hashtags: item.hashtags,
+        visual_direction: item.visualDirection,
+      })),
+    );
+
+    if (contentError) {
+      throw new Error(contentError.message);
+    }
+
+    const usage = generated.rawResponse.usage;
+    await trackAdminAiGeneration({
+      userId: admin.userId,
+      generationType: "social_campaign",
+      model: generated.rawResponse.model ?? getOpenAIModel("plan"),
+      requestFingerprint: buildSocialRequestFingerprint({
+        theme: parsed.data.theme.trim().toLowerCase(),
+        audienceHint: parsed.data.audienceHint?.trim().toLowerCase() ?? null,
+        objectiveHint: parsed.data.objectiveHint?.trim().toLowerCase() ?? null,
+        sourceEventType: parsed.data.sourceEventType?.trim().toLowerCase() ?? null,
+        tone: brandProfile.tone.trim().toLowerCase(),
+        audience: brandProfile.audience.trim().toLowerCase(),
+        signaturePhrases: brandProfile.signaturePhrases.trim().toLowerCase(),
+        ctaStyle: brandProfile.ctaStyle.trim().toLowerCase(),
+        focusMetrics: brandProfile.focusMetrics.trim().toLowerCase(),
+        postingGoalPerWeek: brandProfile.postingGoalPerWeek,
+      }),
+      promptVersion: generated.rawResponse.promptVersion ?? getPromptVersion("social_campaign"),
+      inputTokens: usage?.inputTokens ?? 0,
+      outputTokens: usage?.outputTokens ?? 0,
+      cachedInputTokens: usage?.cachedInputTokens ?? 0,
+      estimatedCostUsd: usage?.estimatedCostUsd ?? 0,
+      latencyMs: usage?.latencyMs ?? 0,
+      status: usage?.usedFallback ? "fallback" : "success",
+    });
+
+    await logSocialMediaActivity({
+      campaignId: createdCampaign.id,
+      action: "campaign_generated",
+      summary: `Generated campaign "${parsed.data.theme}" from theme.`,
+      createdBy: admin.userId,
+      metadata: {
+        theme: parsed.data.theme,
+        contentItems: generated.contentItems.length,
+        usedFallback: usage?.usedFallback ?? false,
+      },
+    });
+
+    revalidateSocialMediaPaths();
+  } catch (error) {
+    failure = error;
   }
 
-  const supabase = createSupabaseAdminClient();
-  const brandProfile = await loadSocialBrandProfile();
-
-  const generated = await generateSocialCampaign(
-    {
-      theme: parsed.data.theme,
-      audienceHint: parsed.data.audienceHint,
-      objectiveHint: parsed.data.objectiveHint,
-      sourceEventType: parsed.data.sourceEventType,
-    },
-    brandProfile,
-  );
-
-  const scheduledWeekOf = parsed.data.scheduledWeekOf?.trim() || null;
-  const { data: createdCampaign, error: campaignError } = await supabase
-    .from("social_media_campaigns")
-    .insert({
-      theme: parsed.data.theme,
-      audience: generated.audience,
-      objective: generated.objective,
-      priority: generated.priority,
-      source_event_type: generated.sourceEventType,
-      scheduled_week_of: scheduledWeekOf,
-      notes: generated.notes,
-      generation_summary: generated.rawResponse.summary ?? "",
-      status: "in_review",
-      created_by: admin.userId,
-    })
-    .select("id")
-    .single<{ id: string }>();
-
-  if (campaignError || !createdCampaign) {
-    throw new Error(campaignError?.message ?? "Unable to create generated campaign.");
-  }
-
-  const { error: contentError } = await supabase.from("social_media_content_items").insert(
-    generated.contentItems.map((item) => ({
-      campaign_id: createdCampaign.id,
-      channel: item.channel,
-      title: item.title,
-      format_detail: item.formatDetail,
-      status: "in_review",
-      publish_on: buildPublishDate(scheduledWeekOf, item.publishOffsetDays),
-      copy: item.copy,
-      call_to_action: item.callToAction,
-      hashtags: item.hashtags,
-      visual_direction: item.visualDirection,
-    })),
-  );
-
-  if (contentError) {
-    throw new Error(contentError.message);
-  }
-
-  const usage = generated.rawResponse.usage;
-  await trackAdminAiGeneration({
-    userId: admin.userId,
-    generationType: "social_campaign",
-    model: generated.rawResponse.model ?? getOpenAIModel("plan"),
-    requestFingerprint: buildSocialRequestFingerprint({
-      theme: parsed.data.theme.trim().toLowerCase(),
-      audienceHint: parsed.data.audienceHint?.trim().toLowerCase() ?? null,
-      objectiveHint: parsed.data.objectiveHint?.trim().toLowerCase() ?? null,
-      sourceEventType: parsed.data.sourceEventType?.trim().toLowerCase() ?? null,
-      tone: brandProfile.tone.trim().toLowerCase(),
-      audience: brandProfile.audience.trim().toLowerCase(),
-      signaturePhrases: brandProfile.signaturePhrases.trim().toLowerCase(),
-      ctaStyle: brandProfile.ctaStyle.trim().toLowerCase(),
-      focusMetrics: brandProfile.focusMetrics.trim().toLowerCase(),
-      postingGoalPerWeek: brandProfile.postingGoalPerWeek,
-    }),
-    promptVersion: generated.rawResponse.promptVersion ?? getPromptVersion("social_campaign"),
-    inputTokens: usage?.inputTokens ?? 0,
-    outputTokens: usage?.outputTokens ?? 0,
-    cachedInputTokens: usage?.cachedInputTokens ?? 0,
-    estimatedCostUsd: usage?.estimatedCostUsd ?? 0,
-    latencyMs: usage?.latencyMs ?? 0,
-    status: usage?.usedFallback ? "fallback" : "success",
-  });
-
-  await logSocialMediaActivity({
-    campaignId: createdCampaign.id,
-    action: "campaign_generated",
-    summary: `Generated campaign "${parsed.data.theme}" from theme.`,
-    createdBy: admin.userId,
-    metadata: {
-      theme: parsed.data.theme,
-      contentItems: generated.contentItems.length,
-      usedFallback: usage?.usedFallback ?? false,
-    },
-  });
-
-  revalidateSocialMediaPaths();
+  finalizeSocialAction(returnTo, `Generated campaign "${parsed.data.theme}".`, failure);
 }
 
 export async function updateSocialMediaCampaignStatusAction(formData: FormData) {
@@ -996,6 +1124,7 @@ export async function regenerateSocialMediaCampaignAction(formData: FormData) {
 
 export async function createSocialMediaContentItemAction(formData: FormData) {
   const admin = await requireAdminAccess();
+  const returnTo = resolveSocialReturnTo(formData);
   const parsed = socialMediaContentItemSchema.safeParse({
     campaignId: formData.get("campaignId"),
     channel: formData.get("channel"),
@@ -1012,49 +1141,84 @@ export async function createSocialMediaContentItemAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid content draft.");
+    redirect(appendSocialFlash(returnTo, "error", parsed.error.issues[0]?.message ?? "Invalid content draft."));
+  }
+  let failure: unknown = null;
+
+  try {
+    const supabase = createSupabaseAdminClient();
+    const publishOn = parsed.data.publishOn?.trim() || null;
+    const status = publishOn ? "scheduled" : "draft";
+    const { data: createdItem, error } = await supabase
+      .from("social_media_content_items")
+      .insert({
+        campaign_id: parsed.data.campaignId,
+        channel: parsed.data.channel,
+        title: parsed.data.title,
+        format_detail: parsed.data.formatDetail,
+        publish_on: publishOn,
+        status,
+        copy: parsed.data.copy,
+        call_to_action: parsed.data.callToAction,
+        hashtags: parsed.data.hashtags?.trim() || "",
+        visual_direction: parsed.data.visualDirection?.trim() || "",
+        image_prompt: parsed.data.imagePrompt?.trim() || "",
+        asset_notes: parsed.data.assetNotes?.trim() || "",
+        reference_links: parsed.data.referenceLinks?.trim() || "",
+      })
+      .select("id")
+      .single<{ id: string }>();
+
+    if (error || !createdItem) {
+      throw new Error(error?.message ?? "Unable to create the social draft.");
+    }
+
+    const uploadedAsset = await maybeUploadSocialAsset({
+      campaignId: parsed.data.campaignId,
+      contentItemId: createdItem.id,
+      file: formData.get("assetFile"),
+    });
+
+    if (uploadedAsset) {
+      const { error: assetUpdateError } = await supabase
+        .from("social_media_content_items")
+        .update({
+          asset_file_name: uploadedAsset.fileName,
+          asset_file_path: uploadedAsset.filePath,
+          asset_public_url: uploadedAsset.publicUrl,
+        })
+        .eq("id", createdItem.id);
+
+      if (assetUpdateError) {
+        throw new Error(assetUpdateError.message);
+      }
+    }
+
+    await logSocialMediaActivity({
+      campaignId: parsed.data.campaignId,
+      contentItemId: createdItem.id,
+      action: "content_created",
+      summary: `Added ${parsed.data.channel.replaceAll("_", " ")} draft "${parsed.data.title}".`,
+      createdBy: admin.userId,
+      metadata: {
+        channel: parsed.data.channel,
+        status,
+        publishOn,
+        uploadedAsset: Boolean(uploadedAsset),
+      },
+    });
+
+    revalidateSocialMediaPaths();
+  } catch (error) {
+    failure = error;
   }
 
-  const supabase = createSupabaseAdminClient();
-  const publishOn = parsed.data.publishOn?.trim() || null;
-  const status = publishOn ? "scheduled" : "draft";
-  const { error } = await supabase.from("social_media_content_items").insert({
-    campaign_id: parsed.data.campaignId,
-    channel: parsed.data.channel,
-    title: parsed.data.title,
-    format_detail: parsed.data.formatDetail,
-    publish_on: publishOn,
-    status,
-    copy: parsed.data.copy,
-    call_to_action: parsed.data.callToAction,
-    hashtags: parsed.data.hashtags?.trim() || "",
-    visual_direction: parsed.data.visualDirection?.trim() || "",
-    image_prompt: parsed.data.imagePrompt?.trim() || "",
-    asset_notes: parsed.data.assetNotes?.trim() || "",
-    reference_links: parsed.data.referenceLinks?.trim() || "",
-  });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  await logSocialMediaActivity({
-    campaignId: parsed.data.campaignId,
-    action: "content_created",
-    summary: `Added ${parsed.data.channel.replaceAll("_", " ")} draft "${parsed.data.title}".`,
-    createdBy: admin.userId,
-    metadata: {
-      channel: parsed.data.channel,
-      status,
-      publishOn,
-    },
-  });
-
-  revalidateSocialMediaPaths();
+  finalizeSocialAction(returnTo, `Added draft "${parsed.data.title}".`, failure);
 }
 
 export async function updateSocialMediaContentItemAction(formData: FormData) {
   const admin = await requireAdminAccess();
+  const returnTo = resolveSocialReturnTo(formData);
   const parsed = socialMediaUpdateContentItemSchema.safeParse({
     contentItemId: formData.get("contentItemId"),
     title: formData.get("title"),
@@ -1071,50 +1235,82 @@ export async function updateSocialMediaContentItemAction(formData: FormData) {
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid content update.");
+    redirect(appendSocialFlash(returnTo, "error", parsed.error.issues[0]?.message ?? "Invalid content update."));
+  }
+  let failure: unknown = null;
+
+  try {
+    const supabase = createSupabaseAdminClient();
+    const publishOn = parsed.data.publishOn?.trim() || null;
+    const { data: existingItem } = await supabase
+      .from("social_media_content_items")
+      .select("campaign_id")
+      .eq("id", parsed.data.contentItemId)
+      .maybeSingle<{ campaign_id: string }>();
+    if (!existingItem) {
+      throw new Error("Content item not found.");
+    }
+    const { error } = await supabase
+      .from("social_media_content_items")
+      .update({
+        title: parsed.data.title,
+        format_detail: parsed.data.formatDetail,
+        publish_on: publishOn,
+        copy: parsed.data.copy,
+        call_to_action: parsed.data.callToAction,
+        hashtags: parsed.data.hashtags?.trim() || "",
+        visual_direction: parsed.data.visualDirection?.trim() || "",
+        image_prompt: parsed.data.imagePrompt?.trim() || "",
+        asset_notes: parsed.data.assetNotes?.trim() || "",
+        reference_links: parsed.data.referenceLinks?.trim() || "",
+        status: parsed.data.status,
+      })
+      .eq("id", parsed.data.contentItemId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const uploadedAsset = await maybeUploadSocialAsset({
+      campaignId: existingItem.campaign_id,
+      contentItemId: parsed.data.contentItemId,
+      file: formData.get("assetFile"),
+    });
+
+    if (uploadedAsset) {
+      const { error: assetUpdateError } = await supabase
+        .from("social_media_content_items")
+        .update({
+          asset_file_name: uploadedAsset.fileName,
+          asset_file_path: uploadedAsset.filePath,
+          asset_public_url: uploadedAsset.publicUrl,
+        })
+        .eq("id", parsed.data.contentItemId);
+
+      if (assetUpdateError) {
+        throw new Error(assetUpdateError.message);
+      }
+    }
+
+    await logSocialMediaActivity({
+      campaignId: existingItem.campaign_id,
+      contentItemId: parsed.data.contentItemId,
+      action: "content_updated",
+      summary: `Saved edits to "${parsed.data.title}".`,
+      createdBy: admin.userId,
+      metadata: {
+        status: parsed.data.status,
+        publishOn,
+        uploadedAsset: Boolean(uploadedAsset),
+      },
+    });
+
+    revalidateSocialMediaPaths();
+  } catch (error) {
+    failure = error;
   }
 
-  const supabase = createSupabaseAdminClient();
-  const publishOn = parsed.data.publishOn?.trim() || null;
-  const { data: existingItem } = await supabase
-    .from("social_media_content_items")
-    .select("campaign_id")
-    .eq("id", parsed.data.contentItemId)
-    .maybeSingle<{ campaign_id: string }>();
-  const { error } = await supabase
-    .from("social_media_content_items")
-    .update({
-      title: parsed.data.title,
-      format_detail: parsed.data.formatDetail,
-      publish_on: publishOn,
-      copy: parsed.data.copy,
-      call_to_action: parsed.data.callToAction,
-      hashtags: parsed.data.hashtags?.trim() || "",
-      visual_direction: parsed.data.visualDirection?.trim() || "",
-      image_prompt: parsed.data.imagePrompt?.trim() || "",
-      asset_notes: parsed.data.assetNotes?.trim() || "",
-      reference_links: parsed.data.referenceLinks?.trim() || "",
-      status: parsed.data.status,
-    })
-    .eq("id", parsed.data.contentItemId);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  await logSocialMediaActivity({
-    campaignId: existingItem?.campaign_id ?? null,
-    contentItemId: parsed.data.contentItemId,
-    action: "content_updated",
-    summary: `Saved edits to "${parsed.data.title}".`,
-    createdBy: admin.userId,
-    metadata: {
-      status: parsed.data.status,
-      publishOn,
-    },
-  });
-
-  revalidateSocialMediaPaths();
+  finalizeSocialAction(returnTo, `Saved changes to "${parsed.data.title}".`, failure);
 }
 
 export async function regenerateSocialMediaContentItemAction(formData: FormData) {
@@ -1267,63 +1463,236 @@ export async function updateSocialMediaContentStatusAction(formData: FormData) {
 
 export async function rescheduleSocialMediaContentItemAction(formData: FormData) {
   const admin = await requireAdminAccess();
+  const returnTo = resolveSocialReturnTo(formData);
   const parsed = socialMediaRescheduleContentSchema.safeParse({
     contentItemId: formData.get("contentItemId"),
     publishOn: formData.get("publishOn") || undefined,
   });
 
   if (!parsed.success) {
-    throw new Error(parsed.error.issues[0]?.message ?? "Invalid publish date update.");
+    redirect(
+      appendSocialFlash(
+        returnTo,
+        "error",
+        parsed.error.issues[0]?.message ?? "Invalid publish date update.",
+      ),
+    );
+  }
+  let failure: unknown = null;
+
+  try {
+    const supabase = createSupabaseAdminClient();
+    const publishOn = parsed.data.publishOn?.trim() || null;
+    const { data: existingItem } = await supabase
+      .from("social_media_content_items")
+      .select("campaign_id, title, status")
+      .eq("id", parsed.data.contentItemId)
+      .maybeSingle<{
+        campaign_id: string;
+        title: string;
+        status: "draft" | "in_review" | "approved" | "scheduled" | "published" | "archived";
+      }>();
+
+    if (!existingItem) {
+      throw new Error("Content item not found.");
+    }
+
+    const nextStatus =
+      existingItem.status === "published" || existingItem.status === "archived"
+        ? existingItem.status
+        : publishOn
+          ? "scheduled"
+          : "approved";
+
+    const { error } = await supabase
+      .from("social_media_content_items")
+      .update({
+        publish_on: publishOn,
+        status: nextStatus,
+      })
+      .eq("id", parsed.data.contentItemId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    await logSocialMediaActivity({
+      campaignId: existingItem.campaign_id,
+      contentItemId: parsed.data.contentItemId,
+      action: "content_rescheduled",
+      summary: publishOn
+        ? `Scheduled "${existingItem.title}" for ${publishOn}.`
+        : `Cleared the publish date for "${existingItem.title}".`,
+      createdBy: admin.userId,
+      metadata: {
+        publishOn,
+        status: nextStatus,
+      },
+    });
+
+    revalidateSocialMediaPaths();
+  } catch (error) {
+    failure = error;
   }
 
-  const supabase = createSupabaseAdminClient();
-  const publishOn = parsed.data.publishOn?.trim() || null;
-  const { data: existingItem } = await supabase
-    .from("social_media_content_items")
-    .select("campaign_id, title, status")
-    .eq("id", parsed.data.contentItemId)
-    .maybeSingle<{
-      campaign_id: string;
-      title: string;
-      status: "draft" | "in_review" | "approved" | "scheduled" | "published" | "archived";
-    }>();
+  finalizeSocialAction(returnTo, "Updated the publish date.", failure);
+}
 
-  if (!existingItem) {
-    throw new Error("Content item not found.");
-  }
-
-  const nextStatus =
-    existingItem.status === "published" || existingItem.status === "archived"
-      ? existingItem.status
-      : publishOn
-        ? "scheduled"
-        : "approved";
-
-  const { error } = await supabase
-    .from("social_media_content_items")
-    .update({
-      publish_on: publishOn,
-      status: nextStatus,
-    })
-    .eq("id", parsed.data.contentItemId);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  await logSocialMediaActivity({
-    campaignId: existingItem.campaign_id,
-    contentItemId: parsed.data.contentItemId,
-    action: "content_rescheduled",
-    summary: publishOn
-      ? `Scheduled "${existingItem.title}" for ${publishOn}.`
-      : `Cleared the publish date for "${existingItem.title}".`,
-    createdBy: admin.userId,
-    metadata: {
-      publishOn,
-      status: nextStatus,
-    },
+export async function planSocialMediaCampaignScheduleAction(formData: FormData) {
+  const admin = await requireAdminAccess();
+  const returnTo = resolveSocialReturnTo(formData);
+  const parsed = socialMediaPlanCampaignScheduleSchema.safeParse({
+    campaignId: formData.get("campaignId"),
+    scheduledWeekOf: formData.get("scheduledWeekOf") || undefined,
   });
 
-  revalidateSocialMediaPaths();
+  if (!parsed.success) {
+    redirect(appendSocialFlash(returnTo, "error", parsed.error.issues[0]?.message ?? "Invalid campaign schedule."));
+  }
+
+  let failure: unknown = null;
+
+  try {
+    const supabase = createSupabaseAdminClient();
+    const scheduledWeekOf = parsed.data.scheduledWeekOf?.trim() || null;
+    const { data: campaign } = await supabase
+      .from("social_media_campaigns")
+      .select("theme")
+      .eq("id", parsed.data.campaignId)
+      .maybeSingle<{ theme: string }>();
+
+    if (!campaign) {
+      throw new Error("Campaign not found.");
+    }
+
+    const { data: contentItems } = await supabase
+      .from("social_media_content_items")
+      .select("id, channel, created_at, status")
+      .eq("campaign_id", parsed.data.campaignId)
+      .neq("status", "archived")
+      .returns<
+        Array<{
+          id: string;
+          channel: "tiktok" | "pinterest" | "instagram" | "email" | "landing_page";
+          created_at: string | null;
+          status: "draft" | "in_review" | "approved" | "scheduled" | "published";
+        }>
+      >();
+
+    const orderedItems = sortContentItemsForSchedule(contentItems ?? []);
+
+    const { error: campaignUpdateError } = await supabase
+      .from("social_media_campaigns")
+      .update({
+        scheduled_week_of: scheduledWeekOf,
+        status: scheduledWeekOf ? "scheduled" : "approved",
+      })
+      .eq("id", parsed.data.campaignId);
+
+    if (campaignUpdateError) {
+      throw new Error(campaignUpdateError.message);
+    }
+
+    for (const [index, item] of orderedItems.entries()) {
+      const { error: itemUpdateError } = await supabase
+        .from("social_media_content_items")
+        .update({
+          publish_on: buildPublishDate(scheduledWeekOf, index),
+          status: item.status === "published" ? "published" : scheduledWeekOf ? "scheduled" : "approved",
+        })
+        .eq("id", item.id);
+
+      if (itemUpdateError) {
+        throw new Error(itemUpdateError.message);
+      }
+    }
+
+    await logSocialMediaActivity({
+      campaignId: parsed.data.campaignId,
+      action: "campaign_schedule_planned",
+      summary: scheduledWeekOf
+        ? `Planned campaign calendar starting ${scheduledWeekOf}.`
+        : `Cleared the campaign calendar for "${campaign.theme}".`,
+      createdBy: admin.userId,
+      metadata: {
+        scheduledWeekOf,
+        itemCount: orderedItems.length,
+      },
+    });
+
+    revalidateSocialMediaPaths();
+  } catch (error) {
+    failure = error;
+  }
+
+  finalizeSocialAction(returnTo, "Updated the campaign schedule.", failure);
+}
+
+export async function updateSocialMediaPerformanceAction(formData: FormData) {
+  const admin = await requireAdminAccess();
+  const returnTo = resolveSocialReturnTo(formData);
+  const parsed = socialMediaPerformanceSchema.safeParse({
+    contentItemId: formData.get("contentItemId"),
+    publishedUrl: formData.get("publishedUrl") || undefined,
+    manualImpressions: formData.get("manualImpressions"),
+    manualClicks: formData.get("manualClicks"),
+    manualConversions: formData.get("manualConversions"),
+    manualRevenueUsd: formData.get("manualRevenueUsd"),
+    performanceNotes: formData.get("performanceNotes") || undefined,
+  });
+
+  if (!parsed.success) {
+    redirect(appendSocialFlash(returnTo, "error", parsed.error.issues[0]?.message ?? "Invalid performance update."));
+  }
+
+  let failure: unknown = null;
+
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { data: existingItem } = await supabase
+      .from("social_media_content_items")
+      .select("campaign_id, title")
+      .eq("id", parsed.data.contentItemId)
+      .maybeSingle<{ campaign_id: string; title: string }>();
+
+    if (!existingItem) {
+      throw new Error("Content item not found.");
+    }
+
+    const { error } = await supabase
+      .from("social_media_content_items")
+      .update({
+        published_url: parsed.data.publishedUrl?.trim() || "",
+        manual_impressions: parsed.data.manualImpressions,
+        manual_clicks: parsed.data.manualClicks,
+        manual_conversions: parsed.data.manualConversions,
+        manual_revenue_usd: Number(parsed.data.manualRevenueUsd.toFixed(2)),
+        performance_notes: parsed.data.performanceNotes?.trim() || "",
+      })
+      .eq("id", parsed.data.contentItemId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    await logSocialMediaActivity({
+      campaignId: existingItem.campaign_id,
+      contentItemId: parsed.data.contentItemId,
+      action: "performance_updated",
+      summary: `Updated performance tracking for "${existingItem.title}".`,
+      createdBy: admin.userId,
+      metadata: {
+        impressions: parsed.data.manualImpressions,
+        clicks: parsed.data.manualClicks,
+        conversions: parsed.data.manualConversions,
+        revenueUsd: Number(parsed.data.manualRevenueUsd.toFixed(2)),
+      },
+    });
+
+    revalidateSocialMediaPaths();
+  } catch (error) {
+    failure = error;
+  }
+
+  finalizeSocialAction(returnTo, "Saved performance metrics.", failure);
 }

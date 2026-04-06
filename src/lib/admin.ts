@@ -161,6 +161,15 @@ type SocialMediaContentItemRow = {
   image_prompt: string;
   asset_notes: string;
   reference_links: string;
+  asset_file_name: string;
+  asset_file_path: string;
+  asset_public_url: string;
+  published_url: string;
+  manual_impressions: number;
+  manual_clicks: number;
+  manual_conversions: number;
+  manual_revenue_usd: number;
+  performance_notes: string;
   created_at: string;
   updated_at: string;
 };
@@ -515,6 +524,15 @@ export type AdminSocialMediaData = {
     imagePrompt: string;
     assetNotes: string;
     referenceLinks: string;
+    assetFileName: string;
+    assetFilePath: string;
+    assetPublicUrl: string;
+    publishedUrl: string;
+    manualImpressions: number;
+    manualClicks: number;
+    manualConversions: number;
+    manualRevenueUsd: number;
+    performanceNotes: string;
     updatedAt: string;
   }>;
 };
@@ -1447,7 +1465,7 @@ export async function getAdminSocialMediaData(): Promise<AdminSocialMediaData> {
       .returns<SocialMediaCampaignRow[]>(),
     supabase
       .from("social_media_content_items")
-      .select("id, campaign_id, channel, title, format_detail, status, publish_on, copy, call_to_action, hashtags, visual_direction, image_prompt, asset_notes, reference_links, created_at, updated_at")
+      .select("id, campaign_id, channel, title, format_detail, status, publish_on, copy, call_to_action, hashtags, visual_direction, image_prompt, asset_notes, reference_links, asset_file_name, asset_file_path, asset_public_url, published_url, manual_impressions, manual_clicks, manual_conversions, manual_revenue_usd, performance_notes, created_at, updated_at")
       .order("updated_at", { ascending: false })
       .limit(64)
       .returns<SocialMediaContentItemRow[]>(),
@@ -1599,6 +1617,15 @@ export async function getAdminSocialMediaData(): Promise<AdminSocialMediaData> {
       imagePrompt: item.image_prompt,
       assetNotes: item.asset_notes,
       referenceLinks: item.reference_links,
+      assetFileName: item.asset_file_name,
+      assetFilePath: item.asset_file_path,
+      assetPublicUrl: item.asset_public_url,
+      publishedUrl: item.published_url,
+      manualImpressions: item.manual_impressions,
+      manualClicks: item.manual_clicks,
+      manualConversions: item.manual_conversions,
+      manualRevenueUsd: Number(item.manual_revenue_usd ?? 0),
+      performanceNotes: item.performance_notes,
       updatedAt: item.updated_at,
     })),
   };
