@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { updateAdminUserPlanTierAction } from "@/app/admin/actions";
+import { createAdminNoteAction, updateAdminUserPlanTierAction } from "@/app/admin/actions";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { DashboardPanel } from "@/components/dashboard/dashboard-panel";
 import { Button } from "@/components/ui/button";
@@ -255,6 +255,55 @@ export default async function AdminUserDetailPage({
           )}
         </div>
       </DashboardPanel>
+
+      <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        <DashboardPanel
+          title="Admin notes"
+          description="Capture support context so the next admin does not start from zero."
+        >
+          <form action={createAdminNoteAction} className="rounded-3xl bg-canvas p-4">
+            <input name="scopeType" type="hidden" value="user" />
+            <input name="scopeId" type="hidden" value={detail.user.id} />
+            <textarea
+              className="min-h-32 w-full rounded-2xl border border-border bg-white px-4 py-3 text-sm text-ink outline-none"
+              name="note"
+              placeholder="Add an internal note about support context, billing questions, AI quality, or host behavior."
+            />
+            <div className="mt-3">
+              <SubmitButton pendingLabel="Saving note..." variant="secondary">
+                Save admin note
+              </SubmitButton>
+            </div>
+          </form>
+        </DashboardPanel>
+
+        <DashboardPanel
+          title="Recent notes for this user"
+          description="Internal notes saved specifically against this account."
+        >
+          <div className="space-y-3">
+            {detail.notes.length ? (
+              detail.notes.map((note) => (
+                <div key={note.id} className="rounded-2xl border border-border bg-white/70 px-4 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm leading-6 text-ink-muted">{note.note}</p>
+                      <p className="mt-2 text-xs uppercase tracking-[0.16em] text-ink-muted">
+                        {note.createdByName ?? note.createdByEmail ?? "Admin operator"}
+                      </p>
+                    </div>
+                    <p className="text-sm text-ink-muted">{formatAdminDateTime(note.createdAt)}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-3xl bg-canvas px-4 py-5 text-sm text-ink-muted">
+                No notes have been added for this user yet.
+              </div>
+            )}
+          </div>
+        </DashboardPanel>
+      </div>
     </AdminShell>
   );
 }

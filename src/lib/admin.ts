@@ -97,6 +97,24 @@ type AuthUserLookup = {
   createdAt: string | null;
 };
 
+type FeatureFlagRow = {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  rollout_percentage: number;
+  updated_at: string;
+};
+
+type AdminNoteRow = {
+  id: string;
+  scope_type: "user" | "event";
+  scope_id: string;
+  note: string;
+  created_by: string;
+  created_at: string;
+};
+
 export type AdminActivityItem = {
   id: string;
   kind: "analytics" | "audit";
@@ -233,6 +251,13 @@ export type AdminUserDetail = {
     subject: string | null;
     sentAt: string | null;
   }>;
+  notes: Array<{
+    id: string;
+    note: string;
+    createdAt: string;
+    createdByEmail: string | null;
+    createdByName: string | null;
+  }>;
 };
 
 export type AdminEventDetail = {
@@ -262,6 +287,87 @@ export type AdminEventDetail = {
     theme: string | null;
     generatedAt: string | null;
   } | null;
+  notes: Array<{
+    id: string;
+    note: string;
+    createdAt: string;
+    createdByEmail: string | null;
+    createdByName: string | null;
+  }>;
+};
+
+export type AdminRevenueMetrics = {
+  totals: {
+    users: number;
+    paidUsers: number;
+    projectedMrrUsd: number;
+    newUsers: number;
+    activatedUsers: number;
+    inviteSendRate: number;
+    rsvpRate: number;
+    shoppingCtr: number;
+  };
+  byPlan: Array<{
+    tier: string;
+    users: number;
+    projectedRevenueUsd: number;
+  }>;
+  growthBuckets: Array<{
+    bucket: string;
+    signups: number;
+    activations: number;
+    invites: number;
+    rsvps: number;
+    clicks: number;
+  }>;
+};
+
+export type AdminFeatureFlag = {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  rolloutPercentage: number;
+  updatedAt: string;
+};
+
+export type AdminSupportData = {
+  noteCount: number;
+  recentNotes: Array<{
+    id: string;
+    scopeType: "user" | "event";
+    scopeId: string;
+    note: string;
+    createdAt: string;
+    createdByEmail: string | null;
+    createdByName: string | null;
+  }>;
+  riskyUsers: Array<{
+    user: AdminUserRow;
+    failureCount: number;
+  }>;
+  riskyEvents: Array<{
+    event: AdminEventRow;
+    aiFailureCount: number;
+    deliveryCount: number;
+  }>;
+};
+
+export type AdminMarketplaceData = {
+  totalClicks: number;
+  totalReplacementActions: number;
+  topEventTypes: Array<{ label: string; count: number }>;
+  topShoppingCategories: Array<{ label: string; count: number }>;
+  topClickedEvents: Array<{ label: string; count: number }>;
+};
+
+export type AdminIntegrationStatus = {
+  services: Array<{
+    key: string;
+    label: string;
+    status: "healthy" | "partial" | "missing";
+    detail: string;
+  }>;
 };
 
 function formatShortDate(value: string) {
@@ -335,6 +441,12 @@ function titleCase(value: string) {
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }
+
+const PLAN_PRICING: Record<string, number> = {
+  free: 0,
+  pro: 29,
+  admin: 99,
+};
 
 function stringifyMetadataValue(value: unknown) {
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -999,6 +1111,288 @@ export async function getAdminTemplateMetrics() {
   });
 }
 
+export async function getAdminRevenueMetrics(rangeDays: AdminRangeDays): Promise<AdminRevenueMetrics> {
+  const supabase = createSupabaseAdminClient();
+  const since = getRangeStart(rangeDays);
+  const buckets = buildDateBuckets(rangeDays);
+  const [users, events, analytics] = await Promise.all([
+    getAdminUsers(undefined),
+    getAdminEvents({}),
+    supabase
+      .from("analytics_events")
+      .select("id, user_id, event_id, event_name, metadata, created_at")
+      .gte("created_at", since)
+      .returns<AnalyticsEventRow[]>(),
+  ]);
+
+  const analyticsRows = analytics.data ?? [];
+  const usersByTier = users.reduce<Map<string, number>>((map, user) => {
+    map.set(user.planTier, (map.get(user.planTier) ?? 0) + 1);
+    return map;
+  }, new Map());
+  const byPlan = [...usersByTier.entries()].map(([tier, count]) => ({
+    tier,
+    users: count,
+    projectedRevenueUsd: count * (PLAN_PRICING[tier] ?? 0),
+  }));
+
+  const growthMap = new Map(
+    buckets.map((bucket) => [
+      bucket,
+      { bucket: formatShortDate(bucket), signups: 0, activations: 0, invites: 0, rsvps: 0, clicks: 0 },
+    ]),
+  );
+
+  for (const user of users) {
+    if (!user.createdAt) continue;
+    const bucket = growthMap.get(user.createdAt.slice(0, 10));
+    if (bucket) bucket.signups += 1;
+  }
+
+  for (const entry of analyticsRows) {
+    const bucket = growthMap.get(entry.created_at.slice(0, 10));
+    if (!bucket) continue;
+    if (entry.event_name === "event_created") bucket.activations += 1;
+    if (entry.event_name === "invite_sent") bucket.invites += 1;
+    if (entry.event_name === "rsvp_received") bucket.rsvps += 1;
+    if (entry.event_name === "shopping_link_clicked") bucket.clicks += 1;
+  }
+
+  const inviteCount = analyticsRows.filter((entry) => entry.event_name === "invite_sent").length;
+  const rsvpCount = analyticsRows.filter((entry) => entry.event_name === "rsvp_received").length;
+  const clickCount = analyticsRows.filter((entry) => entry.event_name === "shopping_link_clicked").length;
+
+  return {
+    totals: {
+      users: users.length,
+      paidUsers: users.filter((user) => user.planTier !== "free").length,
+      projectedMrrUsd: byPlan.reduce((sum, item) => sum + item.projectedRevenueUsd, 0),
+      newUsers: users.filter((user) => user.createdAt && user.createdAt >= since).length,
+      activatedUsers: analyticsRows.filter((entry) => entry.event_name === "event_created").length,
+      inviteSendRate: users.length ? Math.round((inviteCount / Math.max(1, events.length)) * 100) : 0,
+      rsvpRate: inviteCount ? Math.round((rsvpCount / inviteCount) * 100) : 0,
+      shoppingCtr: inviteCount ? Math.round((clickCount / inviteCount) * 100) : 0,
+    },
+    byPlan: byPlan.sort((a, b) => b.projectedRevenueUsd - a.projectedRevenueUsd),
+    growthBuckets: [...growthMap.values()],
+  };
+}
+
+export async function getAdminFeatureFlags(): Promise<AdminFeatureFlag[]> {
+  const supabase = createSupabaseAdminClient();
+  const { data } = await supabase
+    .from("feature_flags")
+    .select("key, label, description, enabled, rollout_percentage, updated_at")
+    .order("key", { ascending: true })
+    .returns<FeatureFlagRow[]>();
+
+  return (data ?? []).map((flag) => ({
+    key: flag.key,
+    label: flag.label,
+    description: flag.description,
+    enabled: flag.enabled,
+    rolloutPercentage: flag.rollout_percentage,
+    updatedAt: flag.updated_at,
+  }));
+}
+
+export async function getAdminSupportData(): Promise<AdminSupportData> {
+  const supabase = createSupabaseAdminClient();
+  const [users, events, authUsers, { data: notes = [] }, { data: aiFailures = [] }, { data: guestMessages = [] }, { data: profiles = [] }] =
+    await Promise.all([
+      getAdminUsers(undefined),
+      getAdminEvents({}),
+      listAuthUsers(),
+      supabase
+        .from("admin_notes")
+        .select("id, scope_type, scope_id, note, created_by, created_at")
+        .order("created_at", { ascending: false })
+        .limit(30)
+        .returns<AdminNoteRow[]>(),
+      supabase
+        .from("ai_generations")
+        .select("id, user_id, event_id, generation_type, model, status, estimated_cost_usd, latency_ms, input_tokens, output_tokens, cached_input_tokens, created_at")
+        .neq("status", "success")
+        .order("created_at", { ascending: false })
+        .limit(100)
+        .returns<AiGenerationRow[]>(),
+      supabase
+        .from("guest_messages")
+        .select("event_id")
+        .order("sent_at", { ascending: false })
+        .limit(100)
+        .returns<Array<{ event_id: string }>>(),
+      supabase.from("profiles").select("id, full_name, plan_tier, phone, created_at").returns<AdminProfile[]>(),
+    ]);
+
+  const authByUser = new Map(authUsers.map((user) => [user.id, user] as const));
+  const profileByUser = new Map((profiles ?? []).map((profile) => [profile.id, profile] as const));
+  const failureCountByUser = (aiFailures ?? []).reduce<Map<string, number>>((map, row) => {
+    map.set(row.user_id, (map.get(row.user_id) ?? 0) + 1);
+    return map;
+  }, new Map());
+  const failureCountByEvent = (aiFailures ?? []).reduce<Map<string, number>>((map, row) => {
+    if (!row.event_id) return map;
+    map.set(row.event_id, (map.get(row.event_id) ?? 0) + 1);
+    return map;
+  }, new Map());
+  const deliveryCountByEvent = (guestMessages ?? []).reduce<Map<string, number>>((map, row) => {
+    map.set(row.event_id, (map.get(row.event_id) ?? 0) + 1);
+    return map;
+  }, new Map());
+
+  return {
+    noteCount: (notes ?? []).length,
+    recentNotes: (notes ?? []).map((note) => ({
+      id: note.id,
+      scopeType: note.scope_type,
+      scopeId: note.scope_id,
+      note: note.note,
+      createdAt: note.created_at,
+      createdByEmail: authByUser.get(note.created_by)?.email ?? null,
+      createdByName: profileByUser.get(note.created_by)?.full_name ?? null,
+    })),
+    riskyUsers: users
+      .map((user) => ({
+        user,
+        failureCount: failureCountByUser.get(user.id) ?? 0,
+      }))
+      .filter((entry) => entry.failureCount > 0)
+      .sort((a, b) => b.failureCount - a.failureCount)
+      .slice(0, 8),
+    riskyEvents: events
+      .map((event) => ({
+        event,
+        aiFailureCount: failureCountByEvent.get(event.id) ?? 0,
+        deliveryCount: deliveryCountByEvent.get(event.id) ?? 0,
+      }))
+      .filter((entry) => entry.aiFailureCount > 0 || entry.deliveryCount > 0)
+      .sort((a, b) => b.aiFailureCount - a.aiFailureCount || b.deliveryCount - a.deliveryCount)
+      .slice(0, 8),
+  };
+}
+
+export async function getAdminMarketplaceData(rangeDays: AdminRangeDays): Promise<AdminMarketplaceData> {
+  const supabase = createSupabaseAdminClient();
+  const since = getRangeStart(rangeDays);
+  const [{ data: analytics = [] }, { data: events = [] }, { data: shoppingItems = [] }] = await Promise.all([
+    supabase
+      .from("analytics_events")
+      .select("id, user_id, event_id, event_name, metadata, created_at")
+      .gte("created_at", since)
+      .returns<AnalyticsEventRow[]>(),
+    supabase
+      .from("events")
+      .select("id, owner_id, title, event_type, event_date, location, guest_target, budget, status, created_at, updated_at")
+      .returns<EventRow[]>(),
+    supabase
+      .from("shopping_lists")
+      .select("id, event_id")
+      .returns<Array<{ id: string; event_id: string }>>()
+      .then(async (listResult) => {
+        const lists = listResult.data ?? [];
+        if (!lists.length) return { data: [], error: null };
+        const listIds = lists.map((list) => list.id);
+        const items = await supabase
+          .from("shopping_items")
+          .select("shopping_list_id, category")
+          .in("shopping_list_id", listIds)
+          .returns<Array<{ shopping_list_id: string; category: string }>>();
+        return {
+          data: (items.data ?? []).map((item) => ({
+            category: item.category,
+            event_id: lists.find((list) => list.id === item.shopping_list_id)?.event_id ?? null,
+          })),
+          error: items.error,
+        };
+      }),
+  ]);
+
+  const eventById = new Map((events ?? []).map((event) => [event.id, event] as const));
+  const clickEvents = (analytics ?? []).filter((entry) => entry.event_name === "shopping_link_clicked");
+  const replacementCount = (analytics ?? []).filter((entry) => entry.event_name === "shopping_pick_replaced").length;
+
+  const topEventTypes = [...clickEvents.reduce<Map<string, number>>((map, entry) => {
+    const eventType = entry.event_id ? eventById.get(entry.event_id)?.event_type ?? "unknown" : "unknown";
+    map.set(eventType, (map.get(eventType) ?? 0) + 1);
+    return map;
+  }, new Map()).entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+
+  const topShoppingCategories = [...(shoppingItems ?? []).reduce<Map<string, number>>((map, item) => {
+    map.set(item.category, (map.get(item.category) ?? 0) + 1);
+    return map;
+  }, new Map()).entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+
+  const topClickedEvents = [...clickEvents.reduce<Map<string, number>>((map, entry) => {
+    const label = entry.event_id ? eventById.get(entry.event_id)?.title ?? "Unknown event" : "Unknown event";
+    map.set(label, (map.get(label) ?? 0) + 1);
+    return map;
+  }, new Map()).entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+
+  return {
+    totalClicks: clickEvents.length,
+    totalReplacementActions: replacementCount,
+    topEventTypes,
+    topShoppingCategories,
+    topClickedEvents,
+  };
+}
+
+export async function getAdminIntegrationStatus(): Promise<AdminIntegrationStatus> {
+  const resendFrom = process.env.RESEND_FROM_EMAIL?.trim() ?? null;
+  const resendApiKey = process.env.RESEND_API_KEY?.trim() ?? null;
+  const openAiKey = process.env.OPENAI_API_KEY?.trim() ?? null;
+  const stripeKey = process.env.STRIPE_SECRET_KEY?.trim() ?? null;
+  const stripeWebhook = process.env.STRIPE_WEBHOOK_SECRET?.trim() ?? null;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? null;
+  const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? null;
+
+  return {
+    services: [
+      {
+        key: "supabase",
+        label: "Supabase",
+        status: supabaseUrl && supabaseAdmin ? "healthy" : "missing",
+        detail: supabaseUrl && supabaseAdmin ? "Application and admin database access are configured." : "Missing database or service-role environment variables.",
+      },
+      {
+        key: "resend",
+        label: "Resend email",
+        status: resendApiKey ? (resendFrom?.includes("resend.dev") ? "partial" : "healthy") : "missing",
+        detail: !resendApiKey
+          ? "RESEND_API_KEY is not configured."
+          : resendFrom?.includes("resend.dev")
+            ? "Email is configured in test mode with resend.dev."
+            : `Sending from ${resendFrom ?? "a configured sender"}.`,
+      },
+      {
+        key: "openai",
+        label: "OpenAI",
+        status: openAiKey ? "healthy" : "missing",
+        detail: openAiKey ? "AI requests can use the configured OpenAI key." : "OPENAI_API_KEY is not configured.",
+      },
+      {
+        key: "stripe",
+        label: "Stripe",
+        status: stripeKey && stripeWebhook ? "partial" : "missing",
+        detail:
+          stripeKey && stripeWebhook
+            ? "Keys are present, but the hosted billing route still returns MVP placeholder messaging."
+            : "Stripe secrets are not fully configured yet.",
+      },
+    ],
+  };
+}
+
 export async function getAdminUserDetail(userId: string): Promise<AdminUserDetail | null> {
   const supabase = createSupabaseAdminClient();
 
@@ -1052,7 +1446,7 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
         : Promise.resolve({ data: [], error: null }),
     ]);
 
-  const [{ data: guestMessages = [] }] = await Promise.all([
+  const [{ data: guestMessages = [] }, { data: notes = [] }] = await Promise.all([
     eventIds.length
       ? supabase
           .from("guest_messages")
@@ -1072,6 +1466,13 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
             }>
           >()
       : Promise.resolve({ data: [], error: null }),
+    supabase
+      .from("admin_notes")
+      .select("id, scope_type, scope_id, note, created_by, created_at")
+      .eq("scope_type", "user")
+      .eq("scope_id", userId)
+      .order("created_at", { ascending: false })
+      .returns<AdminNoteRow[]>(),
   ]);
 
   const authByUser = new Map(authUsers.map((authUser) => [authUser.id, authUser] as const));
@@ -1123,6 +1524,13 @@ export async function getAdminUserDetail(userId: string): Promise<AdminUserDetai
       subject: message.subject,
       sentAt: message.sent_at,
     })),
+    notes: (notes ?? []).map((note) => ({
+      id: note.id,
+      note: note.note,
+      createdAt: note.created_at,
+      createdByEmail: authByUser.get(note.created_by)?.email ?? null,
+      createdByName: profileByUser.get(note.created_by)?.full_name ?? null,
+    })),
   };
 }
 
@@ -1136,6 +1544,7 @@ export async function getAdminEventDetail(eventId: string): Promise<AdminEventDe
     { data: analytics = [] },
     { data: aiFailures = [] },
     { data: plan },
+    { data: notes = [] },
   ] = await Promise.all([
     supabase
       .from("events")
@@ -1190,6 +1599,13 @@ export async function getAdminEventDetail(eventId: string): Promise<AdminEventDe
       .select("theme, generated_at")
       .eq("event_id", eventId)
       .maybeSingle<{ theme: string | null; generated_at: string | null }>(),
+    supabase
+      .from("admin_notes")
+      .select("id, scope_type, scope_id, note, created_by, created_at")
+      .eq("scope_type", "event")
+      .eq("scope_id", eventId)
+      .order("created_at", { ascending: false })
+      .returns<AdminNoteRow[]>(),
   ]);
 
   if (!event) return null;
@@ -1242,5 +1658,12 @@ export async function getAdminEventDetail(eventId: string): Promise<AdminEventDe
     analytics: analytics ?? [],
     aiFailures: aiFailures ?? [],
     planSummary: plan ? { theme: plan.theme, generatedAt: plan.generated_at } : null,
+    notes: (notes ?? []).map((note) => ({
+      id: note.id,
+      note: note.note,
+      createdAt: note.created_at,
+      createdByEmail: authByUser.get(note.created_by)?.email ?? null,
+      createdByName: profileByUser.get(note.created_by)?.full_name ?? null,
+    })),
   };
 }

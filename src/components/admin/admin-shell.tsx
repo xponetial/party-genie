@@ -4,9 +4,14 @@ import {
   ArrowLeft,
   Bot,
   CalendarDays,
+  Flag,
+  HandHelping,
+  PlugZap,
   LayoutDashboard,
   LayoutTemplate,
   LineChart,
+  PackageSearch,
+  PiggyBank,
   Users,
 } from "lucide-react";
 import { LogoutButton } from "@/components/auth/logout-button";
@@ -21,6 +26,11 @@ const adminSections = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/events", label: "Events", icon: CalendarDays },
   { href: "/admin/templates", label: "Templates", icon: LayoutTemplate },
+  { href: "/admin/revenue", label: "Revenue", icon: PiggyBank },
+  { href: "/admin/flags", label: "Flags", icon: Flag },
+  { href: "/admin/support", label: "Support", icon: HandHelping },
+  { href: "/admin/marketplace", label: "Marketplace", icon: PackageSearch },
+  { href: "/admin/integrations", label: "Integrations", icon: PlugZap },
 ] as const;
 
 type AdminShellProps = {
@@ -83,10 +93,10 @@ export function AdminShell({
         </nav>
 
         <div className="mt-auto rounded-3xl bg-[linear-gradient(135deg,_rgba(38,146,255,0.96),_rgba(139,70,255,0.92))] px-4 py-5 text-white">
-          <p className="text-sm uppercase tracking-[0.18em] text-white/70">Phase 1 focus</p>
-          <p className="mt-2 text-lg font-semibold">Analytics, AI, users, events, templates</p>
+          <p className="text-sm uppercase tracking-[0.18em] text-white/70">Admin roadmap</p>
+          <p className="mt-2 text-lg font-semibold">Operations, growth, controls, support, integrations</p>
           <p className="mt-2 text-sm leading-6 text-white/85">
-            This admin area is intentionally focused on visibility first so the next product decisions are based on live data.
+            This workspace now spans the full internal product surface so the next business and support decisions can happen without leaving the app.
           </p>
         </div>
       </aside>
