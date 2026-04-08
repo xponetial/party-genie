@@ -26,6 +26,36 @@ function buildCallbackUrl(origin: string, nextPath: string) {
   return callbackUrl.toString();
 }
 
+function buildAuthEmailShell({
+  title,
+  intro,
+  ctaLabel,
+  ctaUrl,
+  outro,
+}: {
+  title: string;
+  intro: string;
+  ctaLabel: string;
+  ctaUrl: string;
+  outro: string;
+}) {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #111827; line-height: 1.6;">
+      <h1 style="font-size: 24px; margin-bottom: 16px;">${title}</h1>
+      <p>${intro}</p>
+      <p>
+        <a
+          href="${ctaUrl}"
+          style="display: inline-block; padding: 12px 18px; background: #111827; color: #ffffff; text-decoration: none; border-radius: 10px; font-weight: 600;"
+        >
+          ${ctaLabel}
+        </a>
+      </p>
+      <p>${outro}</p>
+    </div>
+  `;
+}
+
 export async function continueWithGoogleAction(
   _prevState: AuthActionState,
   formData: FormData,
@@ -74,18 +104,57 @@ export async function sendMagicLinkAction(
 
   const origin = await getAppOrigin();
   const nextPath = sanitizeNextPath(formData.get("next"));
-  const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithOtp({
+  const supabase = createSupabaseAdminClient();
+  const resend = getResendClient();
+
+  if (!resend) {
+    return {
+      error: "Magic link email is not configured on the server yet.",
+    };
+  }
+
+  const { data, error } = await supabase.auth.admin.generateLink({
+    type: "magiclink",
     email: parsed.data.email,
     options: {
-      emailRedirectTo: buildCallbackUrl(origin, nextPath),
-      shouldCreateUser: true,
+      redirectTo: buildCallbackUrl(origin, nextPath),
     },
   });
 
   if (error) {
     return {
       error: error.message,
+    };
+  }
+
+  const actionLink = data.properties?.action_link;
+
+  if (!actionLink) {
+    return {
+      error: "Unable to generate a secure sign-in link right now.",
+    };
+  }
+
+  const from = getInviteFromEmail();
+  const subject = "Your Party Swami sign-in link";
+  const html = buildAuthEmailShell({
+    title: "Sign in to Party Swami",
+    intro: "Use this secure magic link to open your party workspace. No password required.",
+    ctaLabel: "Open Party Swami",
+    ctaUrl: actionLink,
+    outro: "If you did not request this email, you can safely ignore it.",
+  });
+
+  const { error: sendError } = await resend.emails.send({
+    from,
+    to: parsed.data.email,
+    subject,
+    html,
+  });
+
+  if (sendError) {
+    return {
+      error: sendError.message,
     };
   }
 
@@ -148,22 +217,13 @@ export async function forgotPasswordAction(
 
   const from = getInviteFromEmail();
   const subject = "Reset your Party Swami password";
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #111827; line-height: 1.6;">
-      <h1 style="font-size: 24px; margin-bottom: 16px;">Reset your password</h1>
-      <p>We received a request to reset your Party Swami password.</p>
-      <p>
-        <a
-          href="${passwordResetLink.toString()}"
-          style="display: inline-block; padding: 12px 18px; background: #111827; color: #ffffff; text-decoration: none; border-radius: 10px; font-weight: 600;"
-        >
-          Reset Password
-        </a>
-      </p>
-      <p>If you did not request this, you can safely ignore this email.</p>
-      <p>This link will expire automatically for your security.</p>
-    </div>
-  `;
+  const html = buildAuthEmailShell({
+    title: "Reset your password",
+    intro: "We received a request to reset your Party Swami password.",
+    ctaLabel: "Reset Password",
+    ctaUrl: passwordResetLink.toString(),
+    outro: "If you did not request this, you can safely ignore this email. This link will expire automatically for your security.",
+  });
 
   const { error: sendError } = await resend.emails.send({
     from,
