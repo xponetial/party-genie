@@ -47,10 +47,10 @@ Optional for invite email delivery:
 
 ```bash
 RESEND_API_KEY=your_resend_api_key
-RESEND_FROM_EMAIL="Party Swami <onboarding@resend.dev>"
+RESEND_FROM_EMAIL="Party Swami <noreply@email.partyswami.com>"
 ```
 
-For production sending, replace `onboarding@resend.dev` with a verified sender in Resend. Invite email previews are uploaded to a public Supabase Storage bucket, so email delivery also requires `SUPABASE_SERVICE_ROLE_KEY`.
+Invite email previews are uploaded to a public Supabase Storage bucket, so email delivery also requires `SUPABASE_SERVICE_ROLE_KEY`.
 
 3. Start the app:
 

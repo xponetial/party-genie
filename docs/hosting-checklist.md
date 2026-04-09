@@ -24,9 +24,12 @@ These values must be configured in the hosting provider instead of relying on lo
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
 - `NEXT_PUBLIC_SITE_URL`
 - `OPENAI_API_KEY`
-- `OPENAI_MODEL`
+- `OPENAI_MODEL_PLAN`
+- `OPENAI_MODEL_LIGHTWEIGHT`
+- `OPENAI_MODEL_PREMIUM`
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
 
@@ -60,7 +63,7 @@ These values must be configured in the hosting provider instead of relying on lo
 
 ## 4. Email Delivery
 
-- Replace the Resend sandbox sender with a verified sender/domain.
+- Use your verified Resend sender/domain, such as `Party Swami <noreply@email.partyswami.com>`.
 - Verify `RESEND_FROM_EMAIL` uses the production sender.
 - Re-test invite send flow from the hosted site.
 - Re-test inline invite card rendering in real inboxes.
@@ -172,5 +175,5 @@ Use this section as a running ledger whenever we discover a new hosted-site requ
 
 - Emails and RSVP links require `NEXT_PUBLIC_SITE_URL` on a real hosted domain.
 - Invite card images in email needed inline attachment handling because inboxes cannot fetch `localhost`.
-- Resend currently uses the onboarding test sender and will need a verified production sender.
+- Resend should use your verified production sender, such as `Party Swami <noreply@email.partyswami.com>`.
 - Stripe is not production-ready yet and still needs real hosted integration work.
