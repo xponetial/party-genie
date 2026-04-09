@@ -26,6 +26,14 @@ function buildCallbackUrl(origin: string, nextPath: string) {
   return callbackUrl.toString();
 }
 
+function buildMagicLinkUrl(origin: string, nextPath: string, tokenHash: string) {
+  const callbackUrl = new URL("/callback", origin);
+  callbackUrl.searchParams.set("token_hash", tokenHash);
+  callbackUrl.searchParams.set("type", "email");
+  callbackUrl.searchParams.set("next", nextPath);
+  return callbackUrl.toString();
+}
+
 function buildAuthEmailShell({
   title,
   intro,
@@ -127,13 +135,15 @@ export async function sendMagicLinkAction(
     };
   }
 
-  const actionLink = data.properties?.action_link;
+  const tokenHash = data.properties?.hashed_token;
 
-  if (!actionLink) {
+  if (!tokenHash) {
     return {
       error: "Unable to generate a secure sign-in link right now.",
     };
   }
+
+  const actionLink = buildMagicLinkUrl(origin, nextPath, tokenHash);
 
   const from = getInviteFromEmail();
   const subject = "Your Party Swami sign-in link";

@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
-import { ArrowRight, Mail, Sparkles } from "lucide-react";
+import { useActionState, useMemo, useState } from "react";
+import { ArrowRight, Mail } from "lucide-react";
 import {
-  continueWithGoogleAction,
   sendMagicLinkAction,
   type AuthActionState,
 } from "@/app/(auth)/actions";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,54 +43,73 @@ function GoogleIcon() {
 }
 
 export function AuthEntryForm({ next = "/dashboard", showRecoveryLink = false }: AuthEntryFormProps) {
-  const [googleState, googleFormAction, googlePending] = useActionState(
-    continueWithGoogleAction,
-    initialState,
-  );
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+  const [googlePending, setGooglePending] = useState(false);
   const [emailState, emailFormAction, emailPending] = useActionState(
     sendMagicLinkAction,
     initialState,
   );
 
+  async function handleGoogleContinue() {
+    setGoogleError(null);
+    setGooglePending(true);
+
+    const callbackUrl = new URL("/callback", window.location.origin);
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: callbackUrl.toString(),
+        queryParams: {
+          prompt: "select_account",
+        },
+      },
+    });
+
+    if (error) {
+      setGoogleError(error.message);
+      setGooglePending(false);
+      return;
+    }
+
+    if (!data.url) {
+      setGoogleError("Google sign-in is unavailable right now. Please use email instead.");
+      setGooglePending(false);
+      return;
+    }
+
+    window.location.assign(data.url);
+  }
+
   return (
     <div className="space-y-6">
-      <div className="grid gap-3">
-        <form action={googleFormAction}>
-          <input type="hidden" name="next" value={next} />
-          <Button
-            className="w-full justify-between rounded-[1.5rem] border border-border bg-white px-5 py-4 text-left text-ink hover:bg-white"
-            disabled={googlePending}
-            type="submit"
-            variant="secondary"
-          >
-            <span className="flex items-center gap-3">
-              <GoogleIcon />
-              <span>{googlePending ? "Connecting to Google..." : "Continue with Google"}</span>
-            </span>
-            <ArrowRight className="size-4 text-ink-muted" />
-          </Button>
-        </form>
-
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleGoogleContinue();
+        }}
+      >
         <Button
-          className="w-full justify-between rounded-[1.5rem] border border-border/80 bg-white/70 px-5 py-4 text-left text-ink-muted hover:bg-white/70"
-          disabled
-          type="button"
+          className="w-full justify-between rounded-[1.5rem] border border-border bg-white px-5 py-4 text-left text-ink hover:bg-white"
+          disabled={googlePending}
+          type="submit"
           variant="secondary"
         >
           <span className="flex items-center gap-3">
-            <Sparkles className="size-4" />
-            <span>Continue with Apple</span>
+            <GoogleIcon />
+            <span>{googlePending ? "Connecting to Google..." : "Continue with Google"}</span>
           </span>
-          <span className="text-xs uppercase tracking-[0.18em]">Phase 2</span>
+          <ArrowRight className="size-4 text-ink-muted" />
         </Button>
-      </div>
+      </form>
 
-      {googleState.error ? (
+      {googleError ? (
         <p
           className="rounded-2xl border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-brand"
           aria-live="polite"
         >
-          {googleState.error}
+          {googleError}
         </p>
       ) : null}
 

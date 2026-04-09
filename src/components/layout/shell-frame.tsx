@@ -47,6 +47,7 @@ export function ShellFrame({
         <nav className="flex flex-wrap gap-2 text-sm">
           {[
             { href: "/pricing", label: "Pricing" },
+            { href: "/contact", label: "Contact" },
             { href: "/privacy", label: "Privacy" },
             { href: "/terms", label: "Terms" },
             { href: "/login", label: "Login" },

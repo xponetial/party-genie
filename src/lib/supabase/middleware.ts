@@ -31,6 +31,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
+  const isHomePage = pathname === "/";
   const isAuthPage =
     pathname === "/login" || pathname === "/signup" || pathname === "/forgot-password";
   const isProtectedPage =
@@ -48,6 +49,10 @@ export async function updateSession(request: NextRequest) {
   if (user && isAuthPage) {
     const nextPath = sanitizeNextPath(request.nextUrl.searchParams.get("next"));
     return NextResponse.redirect(new URL(nextPath, request.url));
+  }
+
+  if (user && isHomePage) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return response;

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Sparkles } from "lucide-react";
+import { ContactCard } from "@/components/contact/contact-card";
 import { ShellFrame } from "@/components/layout/shell-frame";
 import { Card } from "@/components/ui/card";
 import { DEFAULT_LIMITS, type PlanTier } from "@/lib/ai/limits";
@@ -143,6 +144,14 @@ export default function PricingPage() {
                 {item}
               </div>
             ))}
+          </div>
+          <div className="mt-5">
+            <ContactCard
+              title="Sales and partnerships"
+              description="Need custom pricing, concierge planning, or a business conversation? Reach the Party Swami sales inbox directly."
+              emailKey="sales"
+              context="pricing"
+            />
           </div>
         </Card>
       </section>
