@@ -26,6 +26,14 @@ function buildCallbackUrl(origin: string, nextPath: string) {
   return callbackUrl.toString();
 }
 
+function buildMagicLinkCallbackUrl(origin: string, nextPath: string, tokenHash: string, type: string) {
+  const callbackUrl = new URL("/callback", origin);
+  callbackUrl.searchParams.set("next", nextPath);
+  callbackUrl.searchParams.set("token_hash", tokenHash);
+  callbackUrl.searchParams.set("type", type);
+  return callbackUrl.toString();
+}
+
 function buildAuthEmailShell({
   title,
   intro,
@@ -127,13 +135,16 @@ export async function sendMagicLinkAction(
     };
   }
 
-  const actionLink = data.properties?.action_link;
+  const tokenHash = data.properties?.hashed_token;
+  const verificationType = data.properties?.verification_type;
 
-  if (!actionLink) {
+  if (!tokenHash || !verificationType) {
     return {
       error: "Unable to generate a secure sign-in link right now.",
     };
   }
+
+  const magicLink = buildMagicLinkCallbackUrl(origin, nextPath, tokenHash, verificationType);
 
   const from = getInviteFromEmail();
   const subject = "Your Party Swami sign-in link";
@@ -141,7 +152,7 @@ export async function sendMagicLinkAction(
     title: "Sign in to Party Swami",
     intro: "Use this secure magic link to open your party workspace. No password required.",
     ctaLabel: "Open Party Swami",
-    ctaUrl: actionLink,
+    ctaUrl: magicLink,
     outro: "If you did not request this email, you can safely ignore it.",
   });
 
