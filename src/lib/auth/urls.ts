@@ -3,6 +3,10 @@ import { headers } from "next/headers";
 const DEFAULT_REDIRECT_PATH = "/dashboard";
 
 export async function getAppOrigin() {
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL;
+  }
+
   const headerStore = await headers();
   const forwardedHost = headerStore.get("x-forwarded-host");
   const host = forwardedHost ?? headerStore.get("host");
@@ -19,10 +23,6 @@ export async function getAppOrigin() {
 
   if (originHeader) {
     return originHeader;
-  }
-
-  if (process.env.NEXT_PUBLIC_SITE_URL) {
-    return process.env.NEXT_PUBLIC_SITE_URL;
   }
 
   if (process.env.VERCEL_URL) {
