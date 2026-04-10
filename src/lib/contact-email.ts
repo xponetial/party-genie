@@ -18,6 +18,7 @@ export type ContactContext =
   | "admin";
 
 export type ContactIntent = "general" | "bug" | "feature";
+export type ContactFormCategory = "general" | "support" | "bug" | "feature" | "info" | "sales";
 
 const CONTACT_SUBJECTS: Record<ContactContext, string> = {
   marketing: "Party Swami inquiry",
@@ -43,7 +44,7 @@ export function getContactEmail(key: ContactEmailKey) {
   return CONTACT_EMAILS[key];
 }
 
-function getContextLabel(context: ContactContext) {
+export function getContextLabel(context: ContactContext) {
   switch (context) {
     case "marketing":
       return "Marketing";
@@ -62,7 +63,7 @@ function getContextLabel(context: ContactContext) {
   }
 }
 
-function buildDefaultSubject(context: ContactContext, intent: ContactIntent) {
+export function buildDefaultSubject(context: ContactContext, intent: ContactIntent) {
   const contextLabel = getContextLabel(context);
 
   switch (intent) {
@@ -75,7 +76,7 @@ function buildDefaultSubject(context: ContactContext, intent: ContactIntent) {
   }
 }
 
-function buildDefaultBody(options: {
+export function buildDefaultBody(options: {
   context: ContactContext;
   intent: ContactIntent;
   pageLabel?: string;
@@ -124,6 +125,70 @@ function buildDefaultBody(options: {
   }
 
   return lines.join("\n");
+}
+
+export function getFormCategoryFromIntent(intent: ContactIntent) {
+  switch (intent) {
+    case "bug":
+      return "bug" satisfies ContactFormCategory;
+    case "feature":
+      return "feature" satisfies ContactFormCategory;
+    case "general":
+      return "support" satisfies ContactFormCategory;
+  }
+}
+
+export function getEmailKeyForFormCategory(category: ContactFormCategory): ContactEmailKey {
+  switch (category) {
+    case "general":
+      return "hello";
+    case "support":
+    case "bug":
+    case "feature":
+      return "support";
+    case "info":
+      return "info";
+    case "sales":
+      return "sales";
+  }
+}
+
+export function buildContactFormHref(options?: {
+  category?: ContactFormCategory;
+  context?: ContactContext;
+  intent?: ContactIntent;
+  pageLabel?: string;
+  pagePath?: string;
+  pageUrl?: string;
+}) {
+  const params = new URLSearchParams();
+
+  if (options?.category) {
+    params.set("category", options.category);
+  }
+
+  if (options?.context) {
+    params.set("context", options.context);
+  }
+
+  if (options?.intent) {
+    params.set("intent", options.intent);
+  }
+
+  if (options?.pageLabel) {
+    params.set("pageLabel", options.pageLabel);
+  }
+
+  if (options?.pagePath) {
+    params.set("pagePath", options.pagePath);
+  }
+
+  if (options?.pageUrl) {
+    params.set("pageUrl", options.pageUrl);
+  }
+
+  const query = params.toString();
+  return query ? `/contact?${query}` : "/contact";
 }
 
 export function buildMailtoHref(

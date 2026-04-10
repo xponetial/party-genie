@@ -123,8 +123,17 @@ Requirement:
 ### Phase 3
 
 - Build a structured in-app feedback form
-- Add spam controls and request tagging
+- Add spam controls with Cloudflare Turnstile (invisible CAPTCHA)
+- Add request tagging
 - Store or route support submissions through a managed workflow
+
+Phase 3 implementation notes:
+
+- The `/contact` page should include a structured form for general questions, support requests, bug reports, feature requests, info inquiries, and sales conversations
+- Bug-report and feature-request entry points from any page should land on the structured form with context prefilled
+- Cloudflare Turnstile must run with low-friction invisible or interaction-only behavior and must always be verified server-side
+- Form submissions should route through Resend using the approved Party Swami sender domain, with reply-to set to the submitter's email
+- Submission metadata should include category, context, and page details for faster triage
 
 ## Success Metrics
 
@@ -138,6 +147,14 @@ Requirement:
 - Too many generic inbox entry points can confuse users
 - Public exposure of admin inboxes can create noise
 - `mailto:` flows may be underused by users without configured mail clients
+- Structured feedback forms will require spam protection before production rollout
+
+## CAPTCHA Requirement
+
+- Use Cloudflare Turnstile as the standard CAPTCHA solution for future structured feedback and support forms
+- Prefer invisible Turnstile to reduce friction for legitimate users
+- Apply Turnstile to non-authenticated or abuse-prone submission paths first
+- Verify Turnstile tokens server-side before accepting form submissions
 
 ## Developer Notes
 

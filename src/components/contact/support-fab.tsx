@@ -2,6 +2,7 @@
 
 import { ContactContext } from "@/lib/contact-email";
 import { ContactLink } from "@/components/contact/contact-link";
+import { FeedbackLink } from "@/components/contact/feedback-link";
 
 export function SupportFab({
   context = "support",
@@ -13,16 +14,14 @@ export function SupportFab({
   return (
     <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-2 sm:bottom-6 sm:right-6">
       <div className="flex flex-wrap justify-end gap-2">
-        <ContactLink
-          emailKey="support"
+        <FeedbackLink
           context={context}
           intent="bug"
           pageLabel={pageLabel}
           label="Report bug"
           className="inline-flex rounded-full border border-white/20 bg-white px-3 py-2 text-xs font-medium text-ink shadow-[0_10px_24px_rgba(17,24,39,0.12)] transition hover:border-brand/40 hover:text-brand"
         />
-        <ContactLink
-          emailKey="support"
+        <FeedbackLink
           context={context}
           intent="feature"
           pageLabel={pageLabel}

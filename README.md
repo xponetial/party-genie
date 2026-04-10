@@ -52,6 +52,15 @@ RESEND_FROM_EMAIL="Party Swami <noreply@email.partyswami.com>"
 
 Invite email previews are uploaded to a public Supabase Storage bucket, so email delivery also requires `SUPABASE_SERVICE_ROLE_KEY`.
 
+Optional for the structured contact and feedback form:
+
+```bash
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=your_turnstile_site_key
+TURNSTILE_SECRET_KEY=your_turnstile_secret_key
+```
+
+The phase 3 contact form uses Cloudflare Turnstile for server-verified spam protection. If these keys are missing, direct inbox links still work, but the structured form will stay disabled.
+
 3. Start the app:
 
 ```bash

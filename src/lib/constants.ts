@@ -11,4 +11,5 @@ export const ANALYTICS_EVENTS = [
   "shopping_link_clicked",
   "shopping_pick_replaced",
   "task_completed",
+  "feedback_submitted",
 ] as const;

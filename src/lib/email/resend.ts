@@ -10,6 +10,10 @@ export function getResendClient() {
   return new Resend(apiKey);
 }
 
-export function getInviteFromEmail() {
+export function getResendFromEmail() {
   return process.env.RESEND_FROM_EMAIL?.trim() || "Party Swami <noreply@email.partyswami.com>";
+}
+
+export function getInviteFromEmail() {
+  return getResendFromEmail();
 }

@@ -1,5 +1,6 @@
 import { APP_NAME } from "@/lib/constants";
 import { ContactLink } from "@/components/contact/contact-link";
+import { FeedbackLink } from "@/components/contact/feedback-link";
 import { ContactContext } from "@/lib/contact-email";
 
 export function SiteFooter({
@@ -26,16 +27,14 @@ export function SiteFooter({
           <ContactLink emailKey="hello" context="marketing" pageLabel={pageLabel} className="transition hover:text-ink" />
           <ContactLink emailKey="support" context={contactContext} pageLabel={pageLabel} className="transition hover:text-ink" />
           <ContactLink emailKey="sales" context="pricing" pageLabel={pageLabel} className="transition hover:text-ink" />
-          <ContactLink
-            emailKey="support"
+          <FeedbackLink
             context={contactContext}
             intent="bug"
             pageLabel={pageLabel}
             label="Report bug"
             className="transition hover:text-ink"
           />
-          <ContactLink
-            emailKey="support"
+          <FeedbackLink
             context={contactContext}
             intent="feature"
             pageLabel={pageLabel}
