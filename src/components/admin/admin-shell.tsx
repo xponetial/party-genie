@@ -16,7 +16,9 @@ import {
   Users,
 } from "lucide-react";
 import { LogoutButton } from "@/components/auth/logout-button";
+import { ContactLink } from "@/components/contact/contact-link";
 import { BrandLockup } from "@/components/layout/brand-lockup";
+import { SiteFooter } from "@/components/layout/site-footer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -112,6 +114,12 @@ export function AdminShell({
               <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-muted">{description}</p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-3">
+              <ContactLink
+                emailKey="admin"
+                context="admin"
+                className="inline-flex rounded-full border border-border bg-white px-4 py-2 text-sm font-medium text-ink transition hover:border-brand/40 hover:text-brand"
+                label="Contact admin"
+              />
               {actions}
               <LogoutButton />
             </div>
@@ -119,6 +127,7 @@ export function AdminShell({
         </header>
 
         <main className="grid gap-4">{children}</main>
+        <SiteFooter contactContext="admin" pageLabel={title} />
       </div>
     </div>
   );

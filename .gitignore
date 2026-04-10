@@ -23,6 +23,7 @@
 
 # misc
 .DS_Store
+.claude/
 *.pem
 /tmp/
 /supabase/.temp/
@@ -44,3 +45,5 @@ tmp-next-dev*.log
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel

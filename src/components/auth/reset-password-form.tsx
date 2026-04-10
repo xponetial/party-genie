@@ -23,8 +23,34 @@ export function ResetPasswordForm({ message }: ResetPasswordFormProps) {
     let isMounted = true;
 
     async function loadRecoveryState() {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tokenHash = searchParams.get("token_hash");
+      const queryType = searchParams.get("type");
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
       const flowType = hashParams.get("type");
+
+      if (tokenHash && queryType === "recovery") {
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: "recovery",
+        });
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (verifyError) {
+          setError(verifyError.message);
+          setIsRecoveryReady(false);
+          setIsCheckingSession(false);
+          return;
+        }
+
+        setIsRecoveryReady(true);
+        setIsCheckingSession(false);
+        setError(null);
+        return;
+      }
 
       if (flowType === "recovery") {
         setIsRecoveryReady(true);

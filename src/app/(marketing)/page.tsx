@@ -9,6 +9,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { ShellFrame } from "@/components/layout/shell-frame";
+import { AuthSessionRedirect } from "@/components/auth/auth-session-redirect";
 import { DashboardPreviewButton } from "@/components/marketing/dashboard-preview-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,24 +35,26 @@ const highlights = [
 
 export default function MarketingHomePage() {
   return (
-    <ShellFrame
-      brandVisual={
-        <Link
-          href="/"
-          className="block overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#080c24] shadow-[0_24px_70px_rgba(7,11,34,0.32)]"
-        >
-          <Image
-            src="/party-swami-banner.png"
-            alt="Party Swami celebration banner"
-            width={1120}
-            height={768}
-            priority
-            className="h-auto w-full max-w-[520px] object-cover"
-          />
-        </Link>
-      }
-    >
-      <section className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
+    <>
+      <AuthSessionRedirect to="/dashboard" />
+      <ShellFrame
+        brandVisual={
+          <Link
+            href="/"
+            className="block overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#080c24] shadow-[0_24px_70px_rgba(7,11,34,0.32)]"
+          >
+            <Image
+              src="/party-swami-banner.png"
+              alt="Party Swami celebration banner"
+              width={1120}
+              height={768}
+              priority
+              className="h-auto w-full max-w-[520px] object-cover"
+            />
+          </Link>
+        }
+      >
+        <section className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
         <div className="space-y-6 rounded-[2rem] border border-white/70 bg-[linear-gradient(135deg,rgba(245,223,255,0.34)_0%,rgba(237,243,255,0.94)_56%,rgba(228,239,255,0.98)_100%)] p-6 shadow-party">
           <Badge>Welcome and onboarding</Badge>
           <div className="space-y-4">
@@ -160,7 +163,8 @@ export default function MarketingHomePage() {
             </div>
           </div>
         </Card>
-      </section>
-    </ShellFrame>
+        </section>
+      </ShellFrame>
+    </>
   );
 }

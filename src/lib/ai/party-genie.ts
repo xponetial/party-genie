@@ -1488,7 +1488,7 @@ export async function generateInviteCopy(event: EventSeed, context?: InviteConte
     generationType: "invitation_text",
     taskType: "lightweight",
     systemPrompt:
-      "You write polished invitation copy for event hosts. Keep the tone warm, specific, guest-facing, and ready to send. The copy should sound like a finished invitation message, not planning notes.",
+      "You write polished invitation body copy for event hosts. Keep the tone warm, specific, guest-facing, and ready to send. The copy should sound like a finished guest message, not planning notes.",
     userPrompt: `Write invitation copy for this event brief.\n${eventBrief(event)}\n\nCurrent invitation field values:
 - Card title: ${title}
 - Card subtitle/vibe: ${subtitle}
@@ -1497,10 +1497,12 @@ export async function generateInviteCopy(event: EventSeed, context?: InviteConte
 ${currentMessage ? `- Current guest message: ${currentMessage}` : ""}
 \nRequirements:
 - Keep it to one polished paragraph of 2 to 4 sentences.
-- Naturally mention the event title, date or timing, and location when available.
 - Make it feel welcoming and specific to the occasion, not generic.
 - Include a light RSVP call to action.
-- Use the provided date/time and location field values directly when they are available.
+- Treat the card title, subtitle, date/time, and location as already visible elsewhere on the invitation.
+- Do not repeat the exact title, date, time, street address, city, state, or ZIP in the guest message unless absolutely necessary for clarity.
+- Focus the guest message on mood, what guests can expect, and a concise RSVP prompt.
+- Avoid opening with "Join us for" followed by the event title and logistics.
 - Return JSON with an inviteCopy field only.`,
     schema: generatedInviteCopySchema,
   }).catch(() => null);

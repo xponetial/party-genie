@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ReactNode } from "react";
 import { Sparkles } from "lucide-react";
 import { BrandLockup } from "@/components/layout/brand-lockup";
+import { SiteFooter } from "@/components/layout/site-footer";
+import { ContactContext } from "@/lib/contact-email";
 
 type ShellFrameProps = {
   children: ReactNode;
@@ -9,6 +11,7 @@ type ShellFrameProps = {
   title?: string;
   description?: string;
   brandVisual?: ReactNode;
+  contactContext?: ContactContext;
 };
 
 export function ShellFrame({
@@ -17,6 +20,7 @@ export function ShellFrame({
   title,
   description,
   brandVisual,
+  contactContext = "marketing",
 }: ShellFrameProps) {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
@@ -46,6 +50,7 @@ export function ShellFrame({
         <nav className="flex flex-wrap gap-2 text-sm">
           {[
             { href: "/pricing", label: "Pricing" },
+            { href: "/contact", label: "Contact" },
             { href: "/privacy", label: "Privacy" },
             { href: "/terms", label: "Terms" },
             { href: "/login", label: "Login" },
@@ -62,6 +67,7 @@ export function ShellFrame({
         </nav>
       </header>
       <main className="flex-1">{children}</main>
+      <SiteFooter className="mt-8" contactContext={contactContext} pageLabel={title ?? eyebrow ?? "Marketing page"} />
     </div>
   );
 }

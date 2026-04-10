@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Sparkles } from "lucide-react";
+import { ContactCard } from "@/components/contact/contact-card";
 import { ShellFrame } from "@/components/layout/shell-frame";
 import { Card } from "@/components/ui/card";
 import { DEFAULT_LIMITS, type PlanTier } from "@/lib/ai/limits";
@@ -64,6 +65,7 @@ export default function PricingPage() {
       eyebrow="Pricing"
       title="Real plan tiers for the Party Swami beta."
       description="These tiers now mirror the AI request, budget, and per-event planning limits enforced inside the product so hosts know exactly what kind of runway they have."
+      contactContext="pricing"
     >
       <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <Card className="bg-gradient-to-br from-white via-[rgba(244,247,255,0.96)] to-[rgba(229,236,255,0.96)]">
@@ -143,6 +145,14 @@ export default function PricingPage() {
                 {item}
               </div>
             ))}
+          </div>
+          <div className="mt-5">
+            <ContactCard
+              title="Sales and partnerships"
+              description="Need custom pricing, concierge planning, or a business conversation? Reach the Party Swami sales inbox directly."
+              emailKey="sales"
+              context="pricing"
+            />
           </div>
         </Card>
       </section>
